@@ -2,8 +2,9 @@
    AttendX — API Client & Shared JS Utilities
    ============================================================ */
 
-const API_BASE = "https://attendx-api.onrender.com/api";
-// During local development replace with: "http://localhost:5000/api"
+const API_BASE = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" 
+  ? "http://localhost:5000/api" 
+  : "https://attendx-api.onrender.com/api";
 
 /* ── Auth Token Helpers ──────────────────────────────────────── */
 const Auth = {
