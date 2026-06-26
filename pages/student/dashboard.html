@@ -7,6 +7,7 @@
   <meta name="description" content="Track your attendance across all enrolled courses."/>
   <link rel="stylesheet" href="../../css/global.css"/>
   <link rel="stylesheet" href="../../css/dashboard.css"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 <div class="app-layout">
@@ -14,22 +15,22 @@
 
   <main class="main-content">
     <div class="page-header">
-      <h1 id="greeting">Welcome back 👋</h1>
+      <h1 id="greeting">Welcome back </h1>
       <p>Your attendance summary across all courses.</p>
     </div>
 
     <!-- Stats -->
     <div class="stats-grid">
       <div class="card stat-card">
-        <div class="stat-icon purple">📚</div>
+        <div class="stat-icon purple"><i data-lucide="book-open"></i></div>
         <div><div class="stat-value" id="statCourses">—</div><div class="stat-label">Enrolled Courses</div></div>
       </div>
       <div class="card stat-card">
-        <div class="stat-icon teal">✅</div>
+        <div class="stat-icon teal"><i data-lucide="check-circle"></i></div>
         <div><div class="stat-value" id="statAvg">—</div><div class="stat-label">Avg. Attendance</div></div>
       </div>
       <div class="card stat-card">
-        <div class="stat-icon yellow">🎭</div>
+        <div class="stat-icon yellow"><i data-lucide="smile"></i></div>
         <div>
           <div class="stat-value" id="statFace">—</div>
           <div class="stat-label">Face Status</div>
@@ -40,12 +41,12 @@
     <!-- Enrollment Alert if face not enrolled -->
     <div id="faceAlert" class="card hidden" style="border-color:rgba(255,179,71,0.4); background:rgba(255,179,71,0.07); margin-bottom:1.5rem;">
       <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
-        <span style="font-size:2rem">⚠️</span>
+        <span style="font-size:2rem; color:var(--warning); display:flex; align-items:center;"><i data-lucide="alert-triangle"></i></span>
         <div style="flex:1">
           <h3 style="color:var(--warning); margin-bottom:0.25rem">Face Not Enrolled</h3>
           <p>Your face hasn't been enrolled yet. You won't be detected during live attendance scans.</p>
         </div>
-        <a href="enroll.html" class="btn btn-accent">Enroll Now →</a>
+        <a href="enroll.html" class="btn btn-accent">Enroll Now <i data-lucide="arrow-right"></i></a>
       </div>
     </div>
 
@@ -64,7 +65,7 @@
   const user = Auth.getUser();
   const hour = new Date().getHours();
   document.getElementById("greeting").textContent =
-    `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, ${user.name.split(" ")[0]} 👋`;
+    `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, ${user.name.split(" ")[0]} `;
 
   renderSidebar("student", "Dashboard");
 
@@ -79,7 +80,7 @@
       ? Math.round(courses.reduce((s, c) => s + c.percentage, 0) / courses.length)
       : 0;
     document.getElementById("statAvg").textContent = avg + "%";
-    document.getElementById("statFace").textContent = profile.face_enrolled ? "✅ Done" : "❌ Missing";
+    document.getElementById("statFace").textContent = profile.face_enrolled ? "<i data-lucide="check-circle"></i> Done" : "<i data-lucide="x-circle"></i> Missing";
 
     if (!profile.face_enrolled) {
       document.getElementById("faceAlert").classList.remove("hidden");
@@ -87,7 +88,7 @@
 
     const grid = document.getElementById("ringsGrid");
     if (!courses.length) {
-      grid.innerHTML = `<div class="card text-center" style="grid-column:1/-1;padding:3rem"><p style="font-size:2rem">📚</p><p class="text-muted mt-1">You are not enrolled in any courses yet.</p></div>`;
+      grid.innerHTML = `<div class="card text-center" style="grid-column:1/-1;padding:3rem"><p style="font-size:2rem"><i data-lucide="book-open"></i></p><p class="text-muted mt-1">You are not enrolled in any courses yet.</p></div>`;
       return;
     }
 
@@ -111,6 +112,12 @@
   }
 
   loadDashboard().catch(() => showToast("Failed to load data", "error"));
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.lucide) lucide.createIcons();
+  });
 </script>
 </body>
 </html>

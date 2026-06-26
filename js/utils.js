@@ -65,11 +65,14 @@ function ensureToastContainer() {
 
 function showToast(message, type = "info", duration = 3500) {
   const container = ensureToastContainer();
-  const icons = { success: "✅", error: "❌", info: "ℹ️" };
+  const icons = { success: "check-circle", error: "x-circle", info: "info" };
   const toast = document.createElement("div");
   toast.className = `toast ${type}`;
-  toast.innerHTML = `<span>${icons[type] || "ℹ️"}</span><span>${message}</span>`;
+  toast.innerHTML = `<span><i data-lucide="${icons[type] || "info"}"></i></span><span>${message}</span>`;
   container.appendChild(toast);
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
   setTimeout(() => {
     toast.style.animation = "fadeOut 0.4s ease forwards";
     toast.addEventListener("animationend", () => toast.remove());
@@ -91,28 +94,28 @@ function renderSidebar(role, activePage) {
 
   const navs = {
     teacher: [
-      { icon: "📊", label: "Dashboard",     href: "dashboard.html" },
-      { icon: "📚", label: "My Courses",    href: "dashboard.html" },
-      { icon: "👤", label: "Profile",       href: "profile.html" },
+      { icon: "layout-dashboard", label: "Dashboard",     href: "dashboard.html" },
+      { icon: "book-open", label: "My Courses",    href: "dashboard.html" },
+      { icon: "user", label: "Profile",       href: "profile.html" },
     ],
     student: [
-      { icon: "📊", label: "Dashboard",     href: "dashboard.html" },
-      { icon: "📚", label: "My Courses",    href: "dashboard.html" },
-      { icon: "🎭", label: "Face Enroll",   href: "enroll.html" },
-      { icon: "👤", label: "Profile",       href: "profile.html" },
+      { icon: "layout-dashboard", label: "Dashboard",     href: "dashboard.html" },
+      { icon: "book-open", label: "My Courses",    href: "dashboard.html" },
+      { icon: "smile", label: "Face Enroll",   href: "enroll.html" },
+      { icon: "user", label: "Profile",       href: "profile.html" },
     ],
     admin: [
-      { icon: "📊", label: "Dashboard",     href: "dashboard.html" },
-      { icon: "👥", label: "Users",         href: "users.html" },
-      { icon: "📚", label: "Courses",       href: "courses.html" },
-      { icon: "🗓️",  label: "Attendance",   href: "attendance_log.html" },
+      { icon: "layout-dashboard", label: "Dashboard",     href: "dashboard.html" },
+      { icon: "users", label: "Users",         href: "users.html" },
+      { icon: "book-open", label: "Courses",       href: "courses.html" },
+      { icon: "calendar",  label: "Attendance",   href: "attendance_log.html" },
     ],
   };
 
   const links = navs[role] || [];
   const navHTML = links.map(n => `
     <a class="nav-link ${n.label === activePage ? "active" : ""}" href="${n.href}">
-      <span class="nav-icon">${n.icon}</span> ${n.label}
+      <span class="nav-icon"><i data-lucide="${n.icon}"></i></span> ${n.label}
     </a>
   `).join("");
 
@@ -136,11 +139,14 @@ function renderSidebar(role, activePage) {
             <div class="user-role">${user.role}</div>
           </div>
         </div>
-        <button class="btn btn-outline btn-sm btn-block" onclick="logout()">🚪 Logout</button>
+        <button class="btn btn-outline btn-sm btn-block" onclick="logout()"><i data-lucide="log-out"></i> Logout</button>
       </div>
     </aside>
   `);
   document.getElementById("sidebar-placeholder")?.remove();
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
 }
 
 function logout() {

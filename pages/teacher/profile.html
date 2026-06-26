@@ -6,6 +6,7 @@
   <title>My Profile — AttendX Teacher</title>
   <link rel="stylesheet" href="../../css/global.css"/>
   <link rel="stylesheet" href="../../css/dashboard.css"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 <div class="app-layout">
@@ -32,7 +33,7 @@
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:1.5rem">✏️ Edit Profile</h3>
+      <h3 style="margin-bottom:1.5rem"><i data-lucide="edit-3"></i> Edit Profile</h3>
       <form id="profileForm">
         <div class="grid-2">
           <div class="form-group">
@@ -83,7 +84,7 @@
         department: document.getElementById("editDept").value.trim(),
         phone:      document.getElementById("editPhone").value.trim(),
       });
-      showToast("Profile updated! ✅", "success");
+      showToast("Profile updated! <i data-lucide="check-circle"></i>", "success");
       loadProfile();
     } catch (err) {
       showToast(err.message, "error");
@@ -91,6 +92,12 @@
   });
 
   loadProfile().catch(() => showToast("Failed to load profile", "error"));
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.lucide) lucide.createIcons();
+  });
 </script>
 </body>
 </html>

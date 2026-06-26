@@ -6,6 +6,7 @@
   <title>Manage Courses — AttendX Admin</title>
   <link rel="stylesheet" href="../../css/global.css"/>
   <link rel="stylesheet" href="../../css/dashboard.css"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 <div class="app-layout">
@@ -13,13 +14,13 @@
 
   <main class="main-content">
     <div class="page-header">
-      <h1>📚 Courses</h1>
+      <h1><i data-lucide="book-open"></i> Courses</h1>
       <p>All courses registered in the system.</p>
     </div>
 
     <div class="admin-actions-bar">
       <div class="search-box">
-        <span class="search-icon">🔍</span>
+        <span class="search-icon"><i data-lucide="search"></i></span>
         <input type="text" id="searchInput" placeholder="Search by name or code…" oninput="filterTable()"/>
       </div>
     </div>
@@ -65,7 +66,7 @@
         <td>${c.teacher}</td>
         <td><span class="badge badge-info">${c.enrolled} students</span></td>
         <td>
-          <button class="btn btn-danger btn-sm" onclick="deleteCourse(${c.id}, '${c.name}')">🗑</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteCourse(${c.id}, '${c.name}')"><i data-lucide="trash-2"></i></button>
         </td>
       </tr>
     `).join("");
@@ -90,6 +91,12 @@
   }
 
   loadCourses().catch(() => showToast("Failed to load courses", "error"));
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.lucide) lucide.createIcons();
+  });
 </script>
 </body>
 </html>
