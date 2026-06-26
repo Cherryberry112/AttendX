@@ -6,6 +6,7 @@
   <title>Manage Users — AttendX Admin</title>
   <link rel="stylesheet" href="../../css/global.css"/>
   <link rel="stylesheet" href="../../css/dashboard.css"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 <div class="app-layout">
@@ -13,13 +14,13 @@
 
   <main class="main-content">
     <div class="page-header">
-      <h1>👥 Users</h1>
+      <h1><i data-lucide="users"></i> Users</h1>
       <p>Manage all registered users in the system.</p>
     </div>
 
     <div class="admin-actions-bar">
       <div class="search-box">
-        <span class="search-icon">🔍</span>
+        <span class="search-icon"><i data-lucide="search"></i></span>
         <input type="text" id="searchInput" placeholder="Search by name or email…" oninput="filterTable()"/>
       </div>
       <button class="btn btn-primary" onclick="openModal('addUserModal')">+ Add User</button>
@@ -109,7 +110,7 @@
         <td><span class="badge ${roleColors[u.role] || 'badge-neutral'}">${u.role}</span></td>
         <td>${fmtDate(u.created_at)}</td>
         <td>
-          <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${u.name}')">🗑</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${u.name}')"><i data-lucide="trash-2"></i></button>
         </td>
       </tr>
     `).join("");
@@ -159,6 +160,12 @@
   });
 
   loadUsers().catch(() => showToast("Failed to load users", "error"));
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.lucide) lucide.createIcons();
+  });
 </script>
 </body>
 </html>

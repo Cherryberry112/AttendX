@@ -7,6 +7,7 @@
   <meta name="description" content="Run live face recognition attendance for your course."/>
   <link rel="stylesheet" href="../../css/global.css"/>
   <link rel="stylesheet" href="../../css/dashboard.css"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 <div class="app-layout">
@@ -19,16 +20,16 @@
         <p id="courseCode" class="text-muted"></p>
       </div>
       <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
-        <button class="btn btn-outline" onclick="openEnrollModal()">+ Enroll Student</button>
-        <button class="btn btn-accent" id="downloadBtn" onclick="downloadExcel()">📥 Download Excel</button>
+        <button class="btn btn-outline" onclick="openEnrollModal()"><i data-lucide="plus"></i> Enroll Student</button>
+        <button class="btn btn-accent" id="downloadBtn" onclick="downloadExcel()"><i data-lucide="download"></i> Download Excel</button>
       </div>
     </div>
 
     <!-- Tabs -->
     <div style="display:flex; gap:0.5rem; margin-bottom:1.5rem; border-bottom:1px solid var(--border-light); padding-bottom:0.5rem;">
-      <button class="btn btn-primary btn-sm" id="tab-camera" onclick="switchTab('camera')">📷 Live Attendance</button>
-      <button class="btn btn-outline btn-sm" id="tab-history" onclick="switchTab('history')">🗓️ Session History</button>
-      <button class="btn btn-outline btn-sm" id="tab-students" onclick="switchTab('students')">👥 Students</button>
+      <button class="btn btn-primary btn-sm" id="tab-camera" onclick="switchTab('camera')"><i data-lucide="camera"></i> Live Attendance</button>
+      <button class="btn btn-outline btn-sm" id="tab-history" onclick="switchTab('history')"><i data-lucide="calendar"></i> Session History</button>
+      <button class="btn btn-outline btn-sm" id="tab-students" onclick="switchTab('students')"><i data-lucide="users"></i> Students</button>
     </div>
 
     <!-- Camera Tab -->
@@ -40,19 +41,19 @@
             <canvas id="cameraCanvas"></canvas>
           </div>
           <div class="camera-controls">
-            <button class="btn btn-primary" id="startBtn" onclick="startCamera()">▶ Start Camera</button>
-            <button class="btn btn-outline hidden" id="stopScanBtn" onclick="stopScan()">⏹ Stop</button>
-            <button class="btn btn-accent hidden" id="startScanBtn" onclick="startScan()">🔍 Start Scan</button>
+            <button class="btn btn-primary" id="startBtn" onclick="startCamera()"><i data-lucide="play"></i> Start Camera</button>
+            <button class="btn btn-outline hidden" id="stopScanBtn" onclick="stopScan()"><i data-lucide="square"></i> Stop</button>
+            <button class="btn btn-accent hidden" id="startScanBtn" onclick="startScan()"><i data-lucide="search"></i> Start Scan</button>
           </div>
         </div>
         <div class="scan-results">
-          <h3>📋 Attendance Draft</h3>
+          <h3><i data-lucide="file-text"></i> Attendance Draft</h3>
           <div class="scan-list" id="scanList">
             <p class="text-muted" style="text-align:center;padding:1rem">Start the camera to begin scanning…</p>
           </div>
           <div class="scan-confirm-bar">
-            <button class="btn btn-outline btn-sm" onclick="resetDraft()">🔄 Reset</button>
-            <button class="btn btn-primary btn-sm" id="confirmBtn" onclick="confirmSession()" disabled>✅ Confirm &amp; Save</button>
+            <button class="btn btn-outline btn-sm" onclick="resetDraft()"><i data-lucide="refresh-cw"></i> Reset</button>
+            <button class="btn btn-primary btn-sm" id="confirmBtn" onclick="confirmSession()" disabled><i data-lucide="check-circle"></i> Confirm &amp; Save</button>
           </div>
         </div>
       </div>
@@ -158,7 +159,7 @@
         <td>${i+1}</td>
         <td><code>${e.sid}</code></td>
         <td>${e.name}</td>
-        <td>${e.face_enrolled ? '<span class="badge badge-success">✅ Enrolled</span>' : '<span class="badge badge-danger">❌ Missing</span>'}</td>
+        <td>${e.face_enrolled ? '<span class="badge badge-success"><i data-lucide="check-circle"></i> Enrolled</span>' : '<span class="badge badge-danger"><i data-lucide="x-circle"></i> Missing</span>'}</td>
       </tr>
     `).join("");
   }
@@ -250,7 +251,7 @@
     document.getElementById("startBtn").classList.remove("hidden");
     document.getElementById("stopScanBtn").classList.add("hidden");
     document.getElementById("startScanBtn").classList.add("hidden");
-    document.getElementById("startScanBtn").textContent = "🔍 Start Scan";
+    document.getElementById("startScanBtn").textContent = "<i data-lucide="search"></i> Start Scan";
     document.getElementById("cameraCanvas").getContext("2d").clearRect(0, 0, 9999, 9999);
     showToast("Scan stopped. Review and confirm the draft.", "info");
   }
@@ -270,7 +271,7 @@
     }));
     try {
       await api.put(`/teacher/sessions/${sessionId}`, { records, confirm: true });
-      showToast("Attendance confirmed and saved! ✅", "success");
+      showToast("Attendance confirmed and saved! <i data-lucide="check-circle"></i>", "success");
       sessionId = null;
       loadCourse();
     } catch (err) {
@@ -313,6 +314,12 @@
   }
 
   loadCourse();
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.lucide) lucide.createIcons();
+  });
 </script>
 </body>
 </html>

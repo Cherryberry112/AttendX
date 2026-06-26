@@ -29,15 +29,15 @@
 }
 .course-card:hover {
   transform: translateY(-4px);
-  border-color: rgba(108,99,255,0.4);
+  border-color: rgba(255,107,0,0.35);
   box-shadow: var(--shadow-glow);
 }
 
 .course-code {
   font-family: monospace;
   font-size: 0.75rem;
-  color: var(--accent);
-  background: rgba(0,212,170,0.1);
+  color: var(--primary);
+  background: rgba(255,107,0,0.08);
   padding: 0.15rem 0.5rem;
   border-radius: var(--radius-pill);
   display: inline-block;
@@ -76,7 +76,7 @@
   transition: all var(--duration) var(--ease);
 }
 .attendance-ring-card:hover {
-  border-color: rgba(108,99,255,0.35);
+  border-color: rgba(255,107,0,0.35);
   transform: translateY(-3px);
 }
 
@@ -155,7 +155,7 @@
   gap: 0.75rem;
   padding: 0.65rem 0.75rem;
   border-radius: var(--radius-sm);
-  background: rgba(255,255,255,0.03);
+  background: rgba(0,0,0,0.02);
   border: 1px solid var(--border-light);
   font-size: 0.82rem;
   transition: background var(--duration);
@@ -201,7 +201,7 @@
   border-color: var(--primary);
   background: var(--primary);
   color: #fff;
-  box-shadow: 0 0 20px rgba(108,99,255,0.5);
+  box-shadow: 0 0 20px rgba(255,107,0,0.35);
   transform: scale(1.15);
 }
 .step-dot.done {
@@ -239,10 +239,10 @@
 }
 .face-oval {
   width: 160px; height: 200px;
-  border: 3px dashed rgba(108,99,255,0.6);
+  border: 3px dashed rgba(255,107,0,0.6);
   border-radius: 50%;
   transition: border-color var(--duration);
-  box-shadow: 0 0 30px rgba(108,99,255,0.2);
+  box-shadow: 0 0 30px rgba(255,107,0,0.2);
 }
 .face-oval.detecting { border-color: var(--warning); }
 .face-oval.detected  { border-color: var(--success); border-style: solid; }
@@ -335,14 +335,14 @@
   gap: 0.75rem;
   padding: 0.75rem;
   border-radius: var(--radius-sm);
-  background: rgba(255,255,255,0.02);
+  background: rgba(0,0,0,0.02);
   border-left: 2px solid var(--border);
   font-size: 0.82rem;
 }
 .activity-icon {
   width: 28px; height: 28px;
   border-radius: 50%;
-  background: rgba(108,99,255,0.15);
+  background: rgba(255,107,0,0.1);
   display: grid; place-items: center;
   font-size: 0.75rem;
   flex-shrink: 0;
@@ -352,5 +352,5 @@
 /* ── Scrollbar ───────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(108,99,255,0.3); border-radius: var(--radius-pill); }
-::-webkit-scrollbar-thumb:hover { background: rgba(108,99,255,0.5); }
+::-webkit-scrollbar-thumb { background: rgba(255,107,0,0.25); border-radius: var(--radius-pill); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,107,0,0.45); }

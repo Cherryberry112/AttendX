@@ -25,3 +25,8 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Local Database & Instance Files
+instance/
+*.db
+*.log

@@ -1,12 +1,34 @@
 import os
+import json
+import flask_jwt_extended
 from flask import Flask
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_sqlalchemy import SQLAlchemy
 from config import config
 
+# Monkey-patch flask_jwt_extended.get_jwt_identity to auto-decode JSON string identities
+original_get_jwt_identity = flask_jwt_extended.get_jwt_identity
+
+def patched_get_jwt_identity():
+    identity = original_get_jwt_identity()
+    if isinstance(identity, str):
+        try:
+            return json.loads(identity)
+        except json.JSONDecodeError:
+            return identity
+    return identity
+
+flask_jwt_extended.get_jwt_identity = patched_get_jwt_identity
+
 db = SQLAlchemy()
 jwt = JWTManager()
+
+@jwt.user_identity_loader
+def user_identity_lookup(identity):
+    if isinstance(identity, (dict, list)):
+        return json.dumps(identity)
+    return str(identity)
 
 def create_app(env=None):
     if env is None:

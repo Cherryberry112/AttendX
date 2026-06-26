@@ -6,6 +6,7 @@
   <title>My Profile — AttendX Student</title>
   <link rel="stylesheet" href="../../css/global.css"/>
   <link rel="stylesheet" href="../../css/dashboard.css"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 <div class="app-layout">
@@ -31,13 +32,13 @@
           <div><span class="text-muted">Courses: </span><span id="profileCourses">—</span></div>
         </div>
         <div style="margin-top:1.25rem">
-          <a href="enroll.html" class="btn btn-accent btn-sm">🎭 Re-enroll Face</a>
+          <a href="enroll.html" class="btn btn-accent btn-sm"><i data-lucide="smile"></i> Re-enroll Face</a>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <h3 style="margin-bottom:1.5rem">📚 Course Attendance</h3>
+      <h3 style="margin-bottom:1.5rem"><i data-lucide="book-open"></i> Course Attendance</h3>
       <div class="table-wrapper">
         <table>
           <thead>
@@ -68,8 +69,8 @@
     document.getElementById("profileDept").textContent    = profile.department || "—";
     document.getElementById("profileCourses").textContent = profile.total_courses;
     document.getElementById("profileFace").innerHTML      = profile.face_enrolled
-      ? '<span class="badge badge-success">✅ Enrolled</span>'
-      : '<span class="badge badge-danger">❌ Not Enrolled</span>';
+      ? '<span class="badge badge-success"><i data-lucide="check-circle"></i> Enrolled</span>'
+      : '<span class="badge badge-danger"><i data-lucide="x-circle"></i> Not Enrolled</span>';
 
     const tbody = document.getElementById("coursesTable");
     if (!courses.length) {
@@ -91,6 +92,12 @@
   }
 
   loadProfile().catch(() => showToast("Failed to load profile", "error"));
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.lucide) lucide.createIcons();
+  });
 </script>
 </body>
 </html>
