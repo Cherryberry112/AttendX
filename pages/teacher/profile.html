@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Profile — AttendX Teacher</title>
+  <link rel="stylesheet" href="../../css/global.css"/>
+  <link rel="stylesheet" href="../../css/dashboard.css"/>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1>My Profile</h1>
+      <p>Manage your personal information.</p>
+    </div>
+
+    <div class="card profile-card mb-2" id="profileCard">
+      <div class="profile-avatar-lg" id="profileAvatar">—</div>
+      <div class="profile-info">
+        <div class="role-badge">Teacher</div>
+        <h2 id="profileName">Loading…</h2>
+        <p id="profileEmail" class="text-muted"></p>
+        <div style="margin-top:1rem; display:flex; gap:1rem; flex-wrap:wrap;">
+          <div><span class="text-muted text-sm">Department: </span><span id="profileDept">—</span></div>
+          <div><span class="text-muted text-sm">Phone: </span><span id="profilePhone">—</span></div>
+          <div><span class="text-muted text-sm">Courses: </span><span id="profileCourses">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom:1.5rem">✏️ Edit Profile</h3>
+      <form id="profileForm">
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input id="editName" type="text" class="form-control"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Department</label>
+            <input id="editDept" type="text" class="form-control"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone Number</label>
+          <input id="editPhone" type="tel" class="form-control"/>
+        </div>
+        <div style="display:flex; justify-content:flex-end;">
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </main>
+</div>
+
+<script src="../../js/utils.js"></script>
+<script>
+  if (!Auth.guard("teacher")) throw new Error("Unauthorized");
+  renderSidebar("teacher", "Profile");
+
+  async function loadProfile() {
+    const p = await api.get("/teacher/profile");
+    const initials = p.name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase();
+    document.getElementById("profileAvatar").textContent   = initials;
+    document.getElementById("profileName").textContent     = p.name;
+    document.getElementById("profileEmail").textContent    = p.email;
+    document.getElementById("profileDept").textContent     = p.department || "—";
+    document.getElementById("profilePhone").textContent    = p.phone || "—";
+    document.getElementById("profileCourses").textContent  = p.total_courses;
+    document.getElementById("editName").value  = p.name;
+    document.getElementById("editDept").value  = p.department || "";
+    document.getElementById("editPhone").value = p.phone || "";
+  }
+
+  document.getElementById("profileForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await api.put("/teacher/profile", {
+        name:       document.getElementById("editName").value.trim(),
+        department: document.getElementById("editDept").value.trim(),
+        phone:      document.getElementById("editPhone").value.trim(),
+      });
+      showToast("Profile updated! ✅", "success");
+      loadProfile();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  });
+
+  loadProfile().catch(() => showToast("Failed to load profile", "error"));
+</script>
+</body>
+</html>

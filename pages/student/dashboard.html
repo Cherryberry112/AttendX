@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Student Dashboard — AttendX</title>
+  <meta name="description" content="Track your attendance across all enrolled courses."/>
+  <link rel="stylesheet" href="../../css/global.css"/>
+  <link rel="stylesheet" href="../../css/dashboard.css"/>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1 id="greeting">Welcome back 👋</h1>
+      <p>Your attendance summary across all courses.</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="card stat-card">
+        <div class="stat-icon purple">📚</div>
+        <div><div class="stat-value" id="statCourses">—</div><div class="stat-label">Enrolled Courses</div></div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-icon teal">✅</div>
+        <div><div class="stat-value" id="statAvg">—</div><div class="stat-label">Avg. Attendance</div></div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-icon yellow">🎭</div>
+        <div>
+          <div class="stat-value" id="statFace">—</div>
+          <div class="stat-label">Face Status</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Enrollment Alert if face not enrolled -->
+    <div id="faceAlert" class="card hidden" style="border-color:rgba(255,179,71,0.4); background:rgba(255,179,71,0.07); margin-bottom:1.5rem;">
+      <div style="display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+        <span style="font-size:2rem">⚠️</span>
+        <div style="flex:1">
+          <h3 style="color:var(--warning); margin-bottom:0.25rem">Face Not Enrolled</h3>
+          <p>Your face hasn't been enrolled yet. You won't be detected during live attendance scans.</p>
+        </div>
+        <a href="enroll.html" class="btn btn-accent">Enroll Now →</a>
+      </div>
+    </div>
+
+    <!-- Courses attendance rings -->
+    <h2 style="margin-bottom:1rem">Course Attendance</h2>
+    <div class="attendance-rings-grid" id="ringsGrid">
+      <p class="text-muted">Loading…</p>
+    </div>
+  </main>
+</div>
+
+<script src="../../js/utils.js"></script>
+<script>
+  if (!Auth.guard("student")) throw new Error("Unauthorized");
+
+  const user = Auth.getUser();
+  const hour = new Date().getHours();
+  document.getElementById("greeting").textContent =
+    `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, ${user.name.split(" ")[0]} 👋`;
+
+  renderSidebar("student", "Dashboard");
+
+  async function loadDashboard() {
+    const [profile, courses] = await Promise.all([
+      api.get("/student/profile"),
+      api.get("/student/courses"),
+    ]);
+
+    document.getElementById("statCourses").textContent = courses.length;
+    const avg = courses.length
+      ? Math.round(courses.reduce((s, c) => s + c.percentage, 0) / courses.length)
+      : 0;
+    document.getElementById("statAvg").textContent = avg + "%";
+    document.getElementById("statFace").textContent = profile.face_enrolled ? "✅ Done" : "❌ Missing";
+
+    if (!profile.face_enrolled) {
+      document.getElementById("faceAlert").classList.remove("hidden");
+    }
+
+    const grid = document.getElementById("ringsGrid");
+    if (!courses.length) {
+      grid.innerHTML = `<div class="card text-center" style="grid-column:1/-1;padding:3rem"><p style="font-size:2rem">📚</p><p class="text-muted mt-1">You are not enrolled in any courses yet.</p></div>`;
+      return;
+    }
+
+    grid.innerHTML = courses.map(c => {
+      const pct = c.percentage;
+      const color = pct >= 75 ? "#0F9B58" : pct >= 50 ? "#FFB347" : "#FF4D6D";
+      return `
+        <div class="attendance-ring-card">
+          <div class="ring-wrapper">${createRing(pct, 100, 8)}</div>
+          <div class="ring-center-text" style="position:relative;margin-top:-108px;margin-bottom:8px;height:100px;">
+            <div style="font-size:1.3rem;font-weight:700;color:${color}">${pct}%</div>
+            <div style="font-size:0.65rem;color:var(--text-muted)">attendance</div>
+          </div>
+          <div style="font-weight:600;font-size:0.9rem;margin-top:0.5rem">${c.name}</div>
+          <div class="course-code">${c.code}</div>
+          <div class="text-muted" style="font-size:0.75rem">${c.attended}/${c.total_sessions} sessions</div>
+          <div class="text-muted" style="font-size:0.75rem">${c.teacher}</div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  loadDashboard().catch(() => showToast("Failed to load data", "error"));
+</script>
+</body>
+</html>

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Attendance Log — AttendX Admin</title>
+  <link rel="stylesheet" href="../../css/global.css"/>
+  <link rel="stylesheet" href="../../css/dashboard.css"/>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1>🗓️ Attendance Log</h1>
+      <p>All confirmed attendance sessions across the system.</p>
+    </div>
+
+    <div class="admin-actions-bar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search by course or teacher…" oninput="filterTable()"/>
+      </div>
+      <span class="text-muted" id="countLabel">Loading…</span>
+    </div>
+
+    <div class="card">
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>#</th><th>Date</th><th>Course</th><th>Teacher</th><th>Present</th><th>Total</th><th>Rate</th><th>Status</th></tr>
+          </thead>
+          <tbody id="logTable">
+            <tr><td colspan="8" class="text-muted" style="text-align:center;padding:2rem">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../../js/utils.js"></script>
+<script>
+  if (!Auth.guard("admin")) throw new Error("Unauthorized");
+  renderSidebar("admin", "Attendance");
+
+  let allSessions = [];
+
+  async function loadLog() {
+    allSessions = await api.get("/admin/attendance");
+    renderLog(allSessions);
+    document.getElementById("countLabel").textContent = `${allSessions.length} sessions`;
+  }
+
+  function renderLog(sessions) {
+    const tbody = document.getElementById("logTable");
+    if (!sessions.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-muted" style="text-align:center;padding:2rem">No sessions found.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = sessions.map((s, i) => {
+      const rate = s.total ? Math.round(s.present / s.total * 100) : 0;
+      const cls  = rate >= 75 ? "badge-success" : rate >= 50 ? "badge-warning" : "badge-danger";
+      return `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${fmtDate(s.date)}</td>
+          <td>${s.course} <code style="font-size:0.7rem">${s.course_code}</code></td>
+          <td>${s.teacher}</td>
+          <td>${s.present}</td>
+          <td>${s.total}</td>
+          <td><span class="badge ${cls}">${rate}%</span></td>
+          <td><span class="badge ${s.status === 'confirmed' ? 'badge-success' : 'badge-warning'}">${s.status}</span></td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  function filterTable() {
+    const q = document.getElementById("searchInput").value.toLowerCase();
+    renderLog(allSessions.filter(s =>
+      s.course.toLowerCase().includes(q) || s.teacher.toLowerCase().includes(q)
+    ));
+  }
+
+  loadLog().catch(() => showToast("Failed to load attendance log", "error"));
+</script>
+</body>
+</html>
