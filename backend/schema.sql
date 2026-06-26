@@ -110,4 +110,4 @@ CREATE TABLE activity_log (
 -- Update the hash after running: python -c "import bcrypt; print(bcrypt.hashpw(b'Admin@1234', bcrypt.gensalt()).decode())"
 -- ============================================================
 INSERT INTO users (name, email, password, role)
-VALUES ('System Admin', 'admin@attendx.com', '$2b$12$PLACEHOLDER_HASH', 'admin');
+VALUES ('System Admin', 'admin@attendx.com', '$2b$12$dS2gRyJtE/xbY0M9ITk7n.Y4QI0Axe9dfZhOfj.WFTSK25i9.kFpK', 'admin');
