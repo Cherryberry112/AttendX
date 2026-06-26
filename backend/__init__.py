@@ -45,6 +45,7 @@ def create_app(env=None):
 
     # Auto-create tables (required for SQLite local setup)
     with app.app_context():
+        import models
         db.create_all()
         # Seed default admin if it doesn't exist
         from models import User
