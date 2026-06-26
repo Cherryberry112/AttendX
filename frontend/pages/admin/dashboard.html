@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Dashboard — AttendX</title>
+  <meta name="description" content="System-wide statistics and overview for AttendX administrators."/>
+  <link rel="stylesheet" href="../../css/global.css"/>
+  <link rel="stylesheet" href="../../css/dashboard.css"/>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1>🛡️ Admin Dashboard</h1>
+      <p>System-wide overview and statistics.</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="card stat-card">
+        <div class="stat-icon purple">👥</div>
+        <div><div class="stat-value" id="statUsers">—</div><div class="stat-label">Total Users</div></div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-icon teal">🎓</div>
+        <div><div class="stat-value" id="statStudents">—</div><div class="stat-label">Students</div></div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-icon yellow">🧑‍🏫</div>
+        <div><div class="stat-value" id="statTeachers">—</div><div class="stat-label">Teachers</div></div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-icon red">📚</div>
+        <div><div class="stat-value" id="statCourses">—</div><div class="stat-label">Courses</div></div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-icon purple">🗓️</div>
+        <div><div class="stat-value" id="statSessions">—</div><div class="stat-label">Sessions Confirmed</div></div>
+      </div>
+    </div>
+
+    <!-- Quick Links -->
+    <h2 style="margin-bottom:1rem">Quick Actions</h2>
+    <div class="grid-3" style="margin-bottom:2rem">
+      <a href="users.html" class="card" style="text-decoration:none; text-align:center; padding:2rem;">
+        <div style="font-size:2.5rem; margin-bottom:0.75rem">👥</div>
+        <h3>Manage Users</h3>
+        <p>Create, view, delete users</p>
+      </a>
+      <a href="courses.html" class="card" style="text-decoration:none; text-align:center; padding:2rem;">
+        <div style="font-size:2.5rem; margin-bottom:0.75rem">📚</div>
+        <h3>Manage Courses</h3>
+        <p>View and delete courses</p>
+      </a>
+      <a href="attendance_log.html" class="card" style="text-decoration:none; text-align:center; padding:2rem;">
+        <div style="font-size:2.5rem; margin-bottom:0.75rem">🗓️</div>
+        <h3>Attendance Log</h3>
+        <p>All confirmed sessions</p>
+      </a>
+    </div>
+  </main>
+</div>
+
+<script src="../../js/utils.js"></script>
+<script>
+  if (!Auth.guard("admin")) throw new Error("Unauthorized");
+  renderSidebar("admin", "Dashboard");
+
+  api.get("/admin/stats").then(stats => {
+    document.getElementById("statUsers").textContent    = stats.total_users;
+    document.getElementById("statStudents").textContent = stats.total_students;
+    document.getElementById("statTeachers").textContent = stats.total_teachers;
+    document.getElementById("statCourses").textContent  = stats.total_courses;
+    document.getElementById("statSessions").textContent = stats.total_sessions;
+  }).catch(() => showToast("Failed to load stats", "error"));
+</script>
+</body>
+</html>

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Teacher Dashboard — AttendX</title>
+  <meta name="description" content="Manage your courses and attendance sessions from your teacher dashboard."/>
+  <link rel="stylesheet" href="../../css/global.css"/>
+  <link rel="stylesheet" href="../../css/dashboard.css"/>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+
+  <main class="main-content">
+    <div class="page-header">
+      <h1 id="greeting">Good morning 👋</h1>
+      <p>Here's what's happening with your courses today.</p>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid" id="statsGrid">
+      <div class="card stat-card">
+        <div class="stat-icon purple">📚</div>
+        <div><div class="stat-value" id="statCourses">—</div><div class="stat-label">Total Courses</div></div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-icon teal">👥</div>
+        <div><div class="stat-value" id="statStudents">—</div><div class="stat-label">Total Students</div></div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-icon yellow">🗓️</div>
+        <div><div class="stat-value" id="statSessions">—</div><div class="stat-label">Sessions Held</div></div>
+      </div>
+    </div>
+
+    <!-- Courses Section -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <h2>My Courses</h2>
+      <button class="btn btn-primary" onclick="openModal('addCourseModal')">+ Add Course</button>
+    </div>
+    <div class="courses-grid" id="coursesGrid">
+      <div class="text-muted text-center" style="grid-column:1/-1; padding:3rem">Loading courses…</div>
+    </div>
+  </main>
+</div>
+
+<!-- Add Course Modal -->
+<div class="modal-overlay" id="addCourseModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Add New Course</h3>
+      <button class="modal-close" onclick="closeModal('addCourseModal')">✕</button>
+    </div>
+    <form id="addCourseForm">
+      <div class="form-group">
+        <label class="form-label">Course Name</label>
+        <input id="cName" type="text" class="form-control" placeholder="Introduction to Algorithms" required/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Course Code</label>
+        <input id="cCode" type="text" class="form-control" placeholder="CSE412" required/>
+      </div>
+      <div style="display:flex; gap:0.75rem; justify-content:flex-end;">
+        <button type="button" class="btn btn-outline" onclick="closeModal('addCourseModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Course</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script src="../../js/utils.js"></script>
+<script>
+  if (!Auth.guard("teacher")) throw new Error("Unauthorized");
+
+  const user = Auth.getUser();
+  const hour = new Date().getHours();
+  document.getElementById("greeting").textContent =
+    `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, ${user.name.split(" ")[0]} 👋`;
+
+  renderSidebar("teacher", "Dashboard");
+
+  async function loadDashboard() {
+    const courses = await api.get("/teacher/courses");
+    const totalStudents = courses.reduce((sum, c) => sum + c.enrolled, 0);
+    const totalSessions = courses.reduce((sum, c) => sum + c.sessions, 0);
+    document.getElementById("statCourses").textContent  = courses.length;
+    document.getElementById("statStudents").textContent = totalStudents;
+    document.getElementById("statSessions").textContent = totalSessions;
+
+    const grid = document.getElementById("coursesGrid");
+    if (courses.length === 0) {
+      grid.innerHTML = `<div class="card text-center" style="grid-column:1/-1;padding:3rem">
+        <p style="font-size:2rem">📚</p>
+        <p class="text-muted mt-1">No courses yet. Add your first course!</p>
+      </div>`;
+      return;
+    }
+
+    grid.innerHTML = courses.map(c => `
+      <div class="course-card" onclick="window.location.href='course.html?id=${c.id}'">
+        <div class="course-code">${c.code}</div>
+        <div class="course-name">${c.name}</div>
+        <div class="course-meta">
+          <span>👥 ${c.enrolled} enrolled</span>
+          <span>🗓️ ${c.sessions} sessions</span>
+        </div>
+      </div>
+    `).join("");
+  }
+
+  document.getElementById("addCourseForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await api.post("/teacher/courses", {
+        name: document.getElementById("cName").value.trim(),
+        code: document.getElementById("cCode").value.trim().toUpperCase(),
+      });
+      showToast("Course created! 🎉", "success");
+      closeModal("addCourseModal");
+      e.target.reset();
+      loadDashboard();
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+  });
+
+  loadDashboard().catch(err => showToast("Failed to load data", "error"));
+</script>
+</body>
+</html>

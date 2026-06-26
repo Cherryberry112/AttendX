@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Register — AttendX</title>
+  <meta name="description" content="Create your AttendX account as a teacher, student, or admin."/>
+  <link rel="stylesheet" href="../css/global.css"/>
+  <link rel="stylesheet" href="../css/auth.css"/>
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card" style="max-width:500px">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">AX</div>
+      <h1>Create Account</h1>
+      <p>Join AttendX — choose your role below</p>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">I am a…</label>
+      <div class="role-selector">
+        <div class="role-option selected" data-role="student" id="role-student">
+          <span>🎓</span><span>Student</span>
+        </div>
+        <div class="role-option" data-role="teacher" id="role-teacher">
+          <span>🧑‍🏫</span><span>Teacher</span>
+        </div>
+        <div class="role-option" data-role="admin" id="role-admin">
+          <span>🛡️</span><span>Admin</span>
+        </div>
+      </div>
+    </div>
+
+    <form id="registerForm" novalidate>
+      <input type="hidden" id="selectedRole" value="student"/>
+
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label" for="name">Full Name</label>
+          <input id="name" type="text" class="form-control" placeholder="Ahmed Rahman" required/>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="regEmail">Email</label>
+          <input id="regEmail" type="email" class="form-control" placeholder="you@uni.edu" required/>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="regPassword">Password</label>
+        <div class="input-group">
+          <span class="input-icon">🔒</span>
+          <input id="regPassword" type="password" class="form-control" placeholder="Min. 8 characters" required minlength="8"/>
+        </div>
+      </div>
+
+      <!-- Student fields -->
+      <div id="student-fields">
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label" for="studentId">Student ID</label>
+            <input id="studentId" type="text" class="form-control" placeholder="2021-CSE-001"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="batch">Batch</label>
+            <input id="batch" type="text" class="form-control" placeholder="2021"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="studentDept">Department</label>
+          <input id="studentDept" type="text" class="form-control" placeholder="Computer Science"/>
+        </div>
+      </div>
+
+      <!-- Teacher fields -->
+      <div id="teacher-fields" class="hidden">
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label" for="teacherDept">Department</label>
+            <input id="teacherDept" type="text" class="form-control" placeholder="Computer Science"/>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="phone">Phone</label>
+            <input id="phone" type="tel" class="form-control" placeholder="+880 1XXX XXXXXX"/>
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="regBtn" style="margin-top:0.5rem">
+        Create Account
+      </button>
+    </form>
+
+    <div class="auth-footer-text">
+      Already have an account? <a href="../index.html">Sign in →</a>
+    </div>
+  </div>
+</div>
+
+<script src="../js/utils.js"></script>
+<script>
+  // Role switcher
+  document.querySelectorAll(".role-option").forEach(opt => {
+    opt.addEventListener("click", () => {
+      document.querySelectorAll(".role-option").forEach(o => o.classList.remove("selected"));
+      opt.classList.add("selected");
+      const role = opt.dataset.role;
+      document.getElementById("selectedRole").value = role;
+      document.getElementById("student-fields").classList.toggle("hidden", role !== "student");
+      document.getElementById("teacher-fields").classList.toggle("hidden", role !== "teacher");
+    });
+  });
+
+  document.getElementById("registerForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById("regBtn");
+    btn.textContent = "Creating account…";
+    btn.disabled = true;
+
+    const role = document.getElementById("selectedRole").value;
+    const payload = {
+      name:     document.getElementById("name").value.trim(),
+      email:    document.getElementById("regEmail").value.trim(),
+      password: document.getElementById("regPassword").value,
+      role,
+    };
+
+    if (role === "student") {
+      payload.student_id = document.getElementById("studentId").value.trim();
+      payload.batch      = document.getElementById("batch").value.trim();
+      payload.department = document.getElementById("studentDept").value.trim();
+    } else if (role === "teacher") {
+      payload.department = document.getElementById("teacherDept").value.trim();
+      payload.phone      = document.getElementById("phone").value.trim();
+    }
+
+    try {
+      await api.post("/auth/register", payload);
+      showToast("Account created! Please sign in.", "success");
+      setTimeout(() => window.location.href = "../index.html", 1200);
+    } catch (err) {
+      showToast(err.message, "error");
+      btn.textContent = "Create Account";
+      btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
