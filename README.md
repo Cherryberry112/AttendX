@@ -127,7 +127,7 @@ The system consists of the following primary database tables:
 
 ## Project Repository
 
-This repository is maintained as part of the **CSE 412 — Software Engineering** course project.
+This repository is maintained as part of the **CSE 412 - Software Engineering** course project.
 
 ---
 
