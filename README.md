@@ -1,4 +1,4 @@
-# AttendX — Smart Attendance System with Face Recognition
+# AttendX - Smart Attendance System with Face Recognition
 
 A web-based smart attendance management system that uses real-time face recognition to automate classroom attendance while reducing manual effort and improving accuracy.
 
@@ -26,17 +26,15 @@ A web-based smart attendance management system that uses real-time face recognit
 
 # Project Overview
 
-AttendX is a modern web-based automated attendance system that utilizes real-time face recognition technology to simplify classroom attendance. Instead of manually recording attendance, the system automatically detects, identifies, and marks students through a classroom webcam.
+AttendX is a modern web-based automated attendance system that utilizes real time face recognition technology to simplify classroom attendance. Instead of manually recording attendance, the system automatically detects, identifies and marks students through a classroom webcam.
 
-The system is designed to reduce classroom time, eliminate proxy attendance, automate attendance calculations, and provide secure role-based access for administrators, teachers, and students.
+The system is designed to reduce classroom time, eliminate proxy attendance, automate attendance calculations and provide secure role based access for administrators, teachers and students.
 
 ---
 
 # Project Vision
 
-Traditional attendance systems consume valuable class time, are prone to proxy attendance, and require manual calculation of attendance records.
-
-AttendX addresses these challenges by providing an automated, secure, and efficient attendance management solution using facial recognition technology.
+Traditional attendance systems consume valuable class time, are prone to proxy attendance and require manual calculation of attendance records. AttendX addresses these challenges by providing an automated, secure and efficient attendance management solution using facial recognition technology.
 
 ---
 
