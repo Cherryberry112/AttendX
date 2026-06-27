@@ -80,7 +80,10 @@
       ? Math.round(courses.reduce((s, c) => s + c.percentage, 0) / courses.length)
       : 0;
     document.getElementById("statAvg").textContent = avg + "%";
-    document.getElementById("statFace").textContent = profile.face_enrolled ? "<i data-lucide="check-circle"></i> Done" : "<i data-lucide="x-circle"></i> Missing";
+    document.getElementById("statFace").innerHTML = profile.face_enrolled 
+      ? "<i data-lucide='check-circle'></i> Done" 
+      : "<i data-lucide='x-circle'></i> Missing";
+    if (window.lucide) lucide.createIcons();
 
     if (!profile.face_enrolled) {
       document.getElementById("faceAlert").classList.remove("hidden");

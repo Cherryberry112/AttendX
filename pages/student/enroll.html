@@ -168,7 +168,8 @@
       captures    = [];
       currentStep = 0;
       updateStepUI(0);
-      document.getElementById("startEnrollBtn").textContent = "<i data-lucide="refresh-cw"></i> Retry Enrollment";
+      document.getElementById("startEnrollBtn").innerHTML = "<i data-lucide='refresh-cw'></i> Retry Enrollment";
+      if (window.lucide) lucide.createIcons();
       document.getElementById("startEnrollBtn").classList.remove("hidden");
     }
   }
