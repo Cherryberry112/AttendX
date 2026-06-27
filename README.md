@@ -26,15 +26,13 @@ A web-based smart attendance management system that uses real-time face recognit
 
 # Project Overview
 
-AttendX is a modern web-based automated attendance system that utilizes real time face recognition technology to simplify classroom attendance. Instead of manually recording attendance, the system automatically detects, identifies and marks students through a classroom webcam.
-
-The system is designed to reduce classroom time, eliminate proxy attendance, automate attendance calculations and provide secure role based access for administrators, teachers and students.
+AttendX is a web based smart attendance management system that automates classroom attendance using real time face recognition technology. The platform provides dedicated portals for administrators, teachers and students, allowing efficient attendance management, face enrollment and attendance reporting.
 
 ---
 
 # Project Vision
 
-Traditional attendance systems consume valuable class time, are prone to proxy attendance and require manual calculation of attendance records. AttendX addresses these challenges by providing an automated, secure and efficient attendance management solution using facial recognition technology.
+The primary goal of AttendX is to modernize traditional attendance management by replacing manual roll calls with an intelligent automated solution. The system aims to improve accuracy, reduce classroom time, minimize proxy attendance and provide an efficient digital platform for managing attendance records.
 
 ---
 
@@ -43,8 +41,7 @@ Traditional attendance systems consume valuable class time, are prone to proxy a
 - Save classroom time through automated attendance.
 - Reduce proxy attendance.
 - Automate attendance statistics and reporting.
-- Provide secure role-based system access.
-- Maintain centralized attendance records.
+- Provide secure role based system access.
 
 ---
 
@@ -92,8 +89,8 @@ Traditional attendance systems consume valuable class time, are prone to proxy a
 
 # Key Features
 
-- Real-time Face Recognition Attendance
-- Five-Step Face Enrollment
+- Real time Face Recognition Attendance
+- Five Step Face Enrollment
 - Student Portal
 - Teacher Portal
 - Administrator Portal
