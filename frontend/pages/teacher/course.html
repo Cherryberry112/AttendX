@@ -251,7 +251,8 @@
     document.getElementById("startBtn").classList.remove("hidden");
     document.getElementById("stopScanBtn").classList.add("hidden");
     document.getElementById("startScanBtn").classList.add("hidden");
-    document.getElementById("startScanBtn").textContent = "<i data-lucide="search"></i> Start Scan";
+    document.getElementById("startScanBtn").innerHTML = "<i data-lucide='search'></i> Start Scan";
+    if (window.lucide) lucide.createIcons();
     document.getElementById("cameraCanvas").getContext("2d").clearRect(0, 0, 9999, 9999);
     showToast("Scan stopped. Review and confirm the draft.", "info");
   }
@@ -271,7 +272,7 @@
     }));
     try {
       await api.put(`/teacher/sessions/${sessionId}`, { records, confirm: true });
-      showToast("Attendance confirmed and saved! <i data-lucide="check-circle"></i>", "success");
+      showToast("Attendance confirmed and saved! <i data-lucide='check-circle'></i>", "success");
       sessionId = null;
       loadCourse();
     } catch (err) {
@@ -296,6 +297,23 @@
   }
 
   async function downloadExcel() {
+    if (window.USE_MOCK) {
+      const records = Object.entries(draftRecords);
+      let csv = "Student ID,Name,Status,Confidence\n";
+      records.forEach(([_, r]) => {
+        csv += `"${r.sid}","${r.name}","${r.present ? "Present" : "Absent"}","${r.confidence ? (r.confidence * 100).toFixed(1) + "%" : "—"}"\n`;
+      });
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `course_${courseData?.course?.code || courseId}_attendance.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast("Mock CSV attendance report downloaded!", "success");
+      return;
+    }
     const token = Auth.getToken();
     const res = await fetch(`${api._req.toString().match(/"[^"]+"/)?.[0]?.replace(/"/g,'') || ''}`, { headers: { Authorization: `Bearer ${token}` } });
     // Direct anchor download

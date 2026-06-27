@@ -84,7 +84,7 @@
         department: document.getElementById("editDept").value.trim(),
         phone:      document.getElementById("editPhone").value.trim(),
       });
-      showToast("Profile updated! <i data-lucide="check-circle"></i>", "success");
+      showToast("Profile updated! <i data-lucide='check-circle'></i>", "success");
       loadProfile();
     } catch (err) {
       showToast(err.message, "error");
