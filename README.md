@@ -140,4 +140,4 @@ This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)**
 > **Academic Notice**
 >
 > This repository is an ongoing university course project developed for academic purposes.
-> Unauthorized copying, redistribution, or submission of this work for academic credit is strictly discouraged.
+> Unauthorized copying, redistribution or submission of this work for academic credit is strictly discouraged.
