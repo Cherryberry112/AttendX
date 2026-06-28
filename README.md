@@ -4,7 +4,7 @@ A web based smart attendance management system that uses real-time face recognit
 
 ---
 
-## 📘 Course Information
+##  Course Information
 
 | Item | Details |
 |------|---------|
@@ -13,7 +13,7 @@ A web based smart attendance management system that uses real-time face recognit
 
 ---
 
-## 👨‍🏫 Course Instructor
+## Course Instructor
 
 | Information | Details |
 |------------|---------|
