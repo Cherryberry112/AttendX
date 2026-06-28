@@ -68,5 +68,5 @@ const API_BASE = "https://your-actual-render-url.onrender.com/api";
 ## Step 6: First Login
 
 Navigate to your GitHub Pages URL. Use:
-- **Email**: `admin@attendx.com`
-- **Password**: `Admin@1234` (change immediately after first login)
+- **Email**: `admin@university.edu`
+- **Password**: `password` (change immediately after first login)
