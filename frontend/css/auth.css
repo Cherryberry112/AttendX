@@ -51,7 +51,7 @@
   font-size: 1.8rem;
   font-weight: 900;
   color: #fff;
-  box-shadow: 0 0 40px rgba(255,107,0,0.3);
+  box-shadow: 0 8px 32px rgba(168, 85, 247, 0.2);
   margin-bottom: 0.5rem;
 }
 
@@ -119,7 +119,7 @@
 .role-option:hover { border-color: var(--primary); color: var(--text-primary); }
 .role-option.selected {
   border-color: var(--primary);
-  background: rgba(255,107,0,0.08);
+  background: rgba(168, 85, 247, 0.08);
   color: var(--primary);
   box-shadow: 0 0 0 1px var(--primary);
 }

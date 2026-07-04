@@ -516,6 +516,20 @@ function renderSidebar(role, activePage) {
   const initials = user.name?.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
 
   document.getElementById("sidebar-placeholder")?.insertAdjacentHTML("afterend", `
+    <!-- Mobile top bar header -->
+    <header class="mobile-header">
+      <div class="mobile-logo">
+        <div class="logo-icon">AX</div>
+        <span class="logo-text">Attend<span>X</span></span>
+      </div>
+      <button class="menu-toggle" onclick="toggleSidebar(true)">
+        <i data-lucide="menu"></i>
+      </button>
+    </header>
+
+    <!-- Sidebar backdrop overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar(false)"></div>
+
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-logo">
         <div class="logo-icon">AX</div>
@@ -540,6 +554,18 @@ function renderSidebar(role, activePage) {
   document.getElementById("sidebar-placeholder")?.remove();
   if (window.lucide) {
     window.lucide.createIcons();
+  }
+}
+
+function toggleSidebar(open) {
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebarOverlay");
+  if (open) {
+    sidebar?.classList.add("open");
+    overlay?.classList.add("active");
+  } else {
+    sidebar?.classList.remove("open");
+    overlay?.classList.remove("active");
   }
 }
 
@@ -584,6 +610,7 @@ window.showToast = showToast;
 window.openModal = openModal;
 window.closeModal = closeModal;
 window.renderSidebar = renderSidebar;
+window.toggleSidebar = toggleSidebar;
 window.logout = logout;
 window.createRing = createRing;
 window.fmtDate = fmtDate;
