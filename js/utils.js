@@ -11,7 +11,7 @@ if (window.location.search.includes("api=render")) localStorage.removeItem("ax_u
 
 const API_BASE = FORCE_LOCAL_API || window.location.protocol === "file:" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" 
   ? "http://localhost:5000/api" 
-  : "https://attendx-api.onrender.com/api";
+  : "https://attendx-api-fw8w.onrender.com/api";
 
 /* ── Auth Token Helpers ──────────────────────────────────────── */
 const Auth = {
