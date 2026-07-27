@@ -21,11 +21,15 @@ const Auth = {
   clear: () => { localStorage.removeItem("ax_token"); localStorage.removeItem("ax_user"); },
   guard: (requiredType) => {
     const user = Auth.getUser();
-    if (!user || !Auth.getToken()) {
+    const token = Auth.getToken();
+    if (!user || !token) {
+      Auth.clear();
       window.location.href = window.location.pathname.includes("/pages/") ? "../../index.html" : "index.html";
       return false;
     }
-    if (requiredType && user.type !== requiredType) {
+    const userType = (user.type || user.role || "").toLowerCase();
+    if (requiredType && userType !== requiredType.toLowerCase()) {
+      Auth.clear();
       window.location.href = window.location.pathname.includes("/pages/") ? "../../index.html" : "index.html";
       return false;
     }

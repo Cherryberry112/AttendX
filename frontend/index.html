@@ -55,8 +55,14 @@
     const user = Auth.getUser();
     const token = Auth.getToken();
     if (user && token) {
-      const role = user.type || user.role;
-      window.location.href = `pages/${role}/dashboard.html`;
+      const role = (user.type || user.role || "").toLowerCase();
+      if (["admin", "teacher", "student"].includes(role)) {
+        window.location.href = `pages/${role}/dashboard.html`;
+      } else {
+        Auth.clear();
+      }
+    } else {
+      Auth.clear();
     }
   })();
 
