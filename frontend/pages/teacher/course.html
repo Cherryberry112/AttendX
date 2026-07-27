@@ -17,16 +17,12 @@
     <div class="page-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:1rem;">
       <div>
         <h1 id="courseTitle">Loading…</h1>
-        <p id="courseCode" class="text-muted"></p>
-      </div>
-      <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
-        <button class="btn btn-outline" onclick="openEnrollModal()"><i data-lucide="plus"></i> Enroll Student</button>
-        <button class="btn btn-accent" id="downloadBtn" onclick="downloadExcel()"><i data-lucide="download"></i> Download Excel</button>
+        <p id="courseSubtitle" class="text-muted"></p>
       </div>
     </div>
 
     <!-- Tabs -->
-    <div style="display:flex; gap:0.5rem; margin-bottom:1.5rem; border-bottom:1px solid var(--border-light); padding-bottom:0.5rem;">
+    <div style="display:flex; gap:0.5rem; margin-bottom:1.5rem; border-bottom:1px solid var(--border-light); padding-bottom:0.5rem; flex-wrap:wrap;">
       <button class="btn btn-primary btn-sm" id="tab-camera" onclick="switchTab('camera')"><i data-lucide="camera"></i> Live Attendance</button>
       <button class="btn btn-outline btn-sm" id="tab-history" onclick="switchTab('history')"><i data-lucide="calendar"></i> Session History</button>
       <button class="btn btn-outline btn-sm" id="tab-students" onclick="switchTab('students')"><i data-lucide="users"></i> Students</button>
@@ -53,7 +49,7 @@
           </div>
           <div class="scan-confirm-bar">
             <button class="btn btn-outline btn-sm" onclick="resetDraft()"><i data-lucide="refresh-cw"></i> Reset</button>
-            <button class="btn btn-primary btn-sm" id="confirmBtn" onclick="confirmSession()" disabled><i data-lucide="check-circle"></i> Confirm &amp; Save</button>
+            <button class="btn btn-primary btn-sm" id="confirmBtn" onclick="confirmAttendance()" disabled><i data-lucide="check-circle"></i> Confirm & Save</button>
           </div>
         </div>
       </div>
@@ -64,8 +60,8 @@
       <div class="card">
         <div class="table-wrapper">
           <table>
-            <thead><tr><th>Date</th><th>Present</th><th>Total</th><th>Rate</th><th>Status</th></tr></thead>
-            <tbody id="historyTable"><tr><td colspan="5" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Present</th><th>Total</th><th>Rate</th></tr></thead>
+            <tbody id="historyTable"><tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -85,24 +81,6 @@
   </main>
 </div>
 
-<!-- Enroll Student Modal -->
-<div class="modal-overlay" id="enrollModal">
-  <div class="modal">
-    <div class="modal-header">
-      <h3>Enroll Student</h3>
-      <button class="modal-close" onclick="closeModal('enrollModal')">✕</button>
-    </div>
-    <div class="form-group">
-      <label class="form-label">Student ID</label>
-      <input id="enrollSid" type="text" class="form-control" placeholder="2021-CSE-001"/>
-    </div>
-    <div style="display:flex; gap:0.75rem; justify-content:flex-end;">
-      <button class="btn btn-outline" onclick="closeModal('enrollModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="enrollStudent()">Enroll</button>
-    </div>
-  </div>
-</div>
-
 <script src="../../js/utils.js"></script>
 <script>
   if (!Auth.guard("teacher")) throw new Error("Unauthorized");
@@ -115,8 +93,7 @@
   let courseData   = null;
   let stream       = null;
   let scanInterval = null;
-  let sessionId    = null;
-  let draftRecords = {}; // student_id -> { present, name, sid, confidence }
+  let draftRecords = {}; // student_id -> { present, username, student_id_str, confidence }
   let scanning     = false;
 
   async function loadCourse() {
@@ -124,12 +101,12 @@
       const data = await api.get(`/teacher/courses/${courseId}`);
       courseData = data;
       document.getElementById("courseTitle").textContent = data.course.name;
-      document.getElementById("courseCode").textContent  = data.course.code;
+      document.getElementById("courseSubtitle").textContent = `Students enrolled by admin`;
       renderHistory(data.sessions);
-      renderStudents(data.enrollments);
-      // Initialize draft with all enrolled students as absent
-      data.enrollments.forEach(e => {
-        draftRecords[e.student_id] = { name: e.name, sid: e.sid, present: false, confidence: 0 };
+      renderStudents(data.students);
+      // Initialize draft
+      data.students.forEach(s => {
+        draftRecords[s.id] = { username: s.username, student_id_str: s.student_id, present: false, confidence: 0 };
       });
       renderDraft();
     } catch (err) {
@@ -139,29 +116,29 @@
 
   function renderHistory(sessions) {
     const tbody = document.getElementById("historyTable");
-    if (!sessions.length) { tbody.innerHTML = `<tr><td colspan="5" class="text-muted" style="text-align:center;padding:1.5rem">No sessions yet.</td></tr>`; return; }
-    tbody.innerHTML = sessions.map(s => `
-      <tr>
-        <td>${fmtDate(s.date)}</td>
-        <td>${s.present}</td>
-        <td>${s.total}</td>
-        <td>${s.total ? Math.round(s.present/s.total*100) : 0}%</td>
-        <td><span class="badge ${s.status==='confirmed'?'badge-success':'badge-warning'}">${s.status}</span></td>
-      </tr>
-    `).join("");
+    if (!sessions.length) { tbody.innerHTML = `<tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">No classes yet.</td></tr>`; return; }
+    tbody.innerHTML = sessions.map(s => {
+      const rate = s.total ? Math.round(s.present / s.total * 100) : 0;
+      const cls = rate >= 75 ? "badge-success" : rate >= 50 ? "badge-warning" : "badge-danger";
+      return `<tr>
+        <td>${fmtDate(s.date)}</td><td>${s.present}</td><td>${s.total}</td>
+        <td><span class="badge ${cls}">${rate}%</span></td>
+      </tr>`;
+    }).join("");
   }
 
-  function renderStudents(enrollments) {
+  function renderStudents(students) {
     const tbody = document.getElementById("studentsTable");
-    if (!enrollments.length) { tbody.innerHTML = `<tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">No students enrolled.</td></tr>`; return; }
-    tbody.innerHTML = enrollments.map((e, i) => `
+    if (!students.length) { tbody.innerHTML = `<tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">No students enrolled.</td></tr>`; return; }
+    tbody.innerHTML = students.map((s, i) => `
       <tr>
         <td>${i+1}</td>
-        <td><code>${e.sid}</code></td>
-        <td>${e.name}</td>
-        <td>${e.face_enrolled ? '<span class="badge badge-success"><i data-lucide="check-circle"></i> Enrolled</span>' : '<span class="badge badge-danger"><i data-lucide="x-circle"></i> Missing</span>'}</td>
+        <td><code>${s.student_id || '—'}</code></td>
+        <td>${s.username}</td>
+        <td>${s.face_enrolled ? '<span class="badge badge-success"><i data-lucide="check-circle"></i> Enrolled</span>' : '<span class="badge badge-danger"><i data-lucide="x-circle"></i> Missing</span>'}</td>
       </tr>
     `).join("");
+    if (window.lucide) lucide.createIcons();
   }
 
   function renderDraft() {
@@ -172,8 +149,8 @@
       <div class="scan-item ${r.present ? 'present' : ''}">
         <div class="scan-dot ${r.present ? 'green' : 'red'}"></div>
         <div style="flex:1">
-          <div style="font-weight:600;font-size:0.83rem">${r.name}</div>
-          <div class="text-muted">${r.sid} ${r.confidence ? '· ' + (r.confidence*100).toFixed(1) + '%' : ''}</div>
+          <div style="font-weight:600;font-size:0.83rem">${r.username}</div>
+          <div class="text-muted">${r.student_id_str || '—'} ${r.confidence ? '· ' + (r.confidence*100).toFixed(1) + '%' : ''}</div>
         </div>
         <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;font-size:0.75rem">
           <input type="checkbox" ${r.present ? 'checked' : ''} onchange="toggleManual(${sid}, this.checked)"/>P
@@ -195,9 +172,6 @@
       document.getElementById("startBtn").classList.add("hidden");
       document.getElementById("stopScanBtn").classList.remove("hidden");
       document.getElementById("startScanBtn").classList.remove("hidden");
-      // Create session draft
-      const res = await api.post(`/teacher/courses/${courseId}/sessions`, {});
-      sessionId = res.session_id;
       showToast("Camera started. Click 'Start Scan' to begin.", "info");
     } catch (err) {
       showToast("Could not access camera: " + err.message, "error");
@@ -205,7 +179,7 @@
   }
 
   function startScan() {
-    if (!stream || !sessionId) return;
+    if (!stream) return;
     scanning = true;
     document.getElementById("startScanBtn").textContent = "⏸ Scanning…";
     scanInterval = setInterval(captureAndScan, 2000);
@@ -239,9 +213,7 @@
         }
       });
       renderDraft();
-    } catch (err) {
-      // Silently ignore scan errors to not interrupt flow
-    }
+    } catch (err) { /* ignore scan errors */ }
   }
 
   function stopScan() {
@@ -259,68 +231,27 @@
 
   function resetDraft() {
     if (!courseData) return;
-    courseData.enrollments.forEach(e => {
-      draftRecords[e.student_id] = { name: e.name, sid: e.sid, present: false, confidence: 0 };
+    courseData.students.forEach(s => {
+      draftRecords[s.id] = { username: s.username, student_id_str: s.student_id, present: false, confidence: 0 };
     });
     renderDraft();
   }
 
-  async function confirmSession() {
-    if (!sessionId) { showToast("No active session", "error"); return; }
-    const records = Object.entries(draftRecords).map(([sid, r]) => ({
-      student_id: parseInt(sid), present: r.present, confidence: r.confidence || null
-    }));
+  async function confirmAttendance() {
+    const presentIds = Object.entries(draftRecords)
+      .filter(([_, r]) => r.present)
+      .map(([sid]) => parseInt(sid));
+    if (!presentIds.length) { showToast("No students marked present", "error"); return; }
     try {
-      await api.put(`/teacher/sessions/${sessionId}`, { records, confirm: true });
-      showToast("Attendance confirmed and saved! <i data-lucide='check-circle'></i>", "success");
-      sessionId = null;
-      loadCourse();
-    } catch (err) {
-      showToast(err.message, "error");
-    }
-  }
-
-  function openEnrollModal() { openModal("enrollModal"); }
-
-  async function enrollStudent() {
-    const sid = document.getElementById("enrollSid").value.trim();
-    if (!sid) return;
-    try {
-      await api.post(`/teacher/courses/${courseId}/enroll`, { student_id: sid });
-      showToast("Student enrolled!", "success");
-      closeModal("enrollModal");
-      document.getElementById("enrollSid").value = "";
-      loadCourse();
-    } catch (err) {
-      showToast(err.message, "error");
-    }
-  }
-
-  async function downloadExcel() {
-    if (window.USE_MOCK) {
-      const records = Object.entries(draftRecords);
-      let csv = "Student ID,Name,Status,Confidence\n";
-      records.forEach(([_, r]) => {
-        csv += `"${r.sid}","${r.name}","${r.present ? "Present" : "Absent"}","${r.confidence ? (r.confidence * 100).toFixed(1) + "%" : "—"}"\n`;
+      await api.post(`/teacher/courses/${courseId}/attendance`, {
+        date: new Date().toISOString().split("T")[0],
+        present_ids: presentIds,
       });
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `course_${courseData?.course?.code || courseId}_attendance.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      showToast("Mock CSV attendance report downloaded!", "success");
-      return;
+      showToast("Attendance confirmed and saved!", "success");
+      loadCourse();
+    } catch (err) {
+      showToast(err.message, "error");
     }
-    const token = Auth.getToken();
-    const res = await fetch(`${api._req.toString().match(/"[^"]+"/)?.[0]?.replace(/"/g,'') || ''}`, { headers: { Authorization: `Bearer ${token}` } });
-    // Direct anchor download
-    const a = document.createElement("a");
-    a.href = `https://attendx-api.onrender.com/api/teacher/courses/${courseId}/excel`;
-    a.download = `course_${courseId}_attendance.xlsx`;
-    document.head.appendChild(a); a.click(); a.remove();
   }
 
   function switchTab(tab) {

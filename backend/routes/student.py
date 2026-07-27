@@ -1,11 +1,13 @@
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import Student, Enrollment, AttendanceRecord, AttendanceSession, Course
+from __init__ import db
+from models import User, Course, Attendance
 
 student_bp = Blueprint("student", __name__)
 
 def _get_student(identity):
-    return Student.query.filter_by(user_id=identity["id"]).first()
+    return User.query.filter_by(id=identity["id"], type="student").first()
+
 
 @student_bp.get("/profile")
 @jwt_required()
@@ -14,16 +16,16 @@ def get_profile():
     student = _get_student(identity)
     if not student:
         return jsonify({"error": "Student profile not found"}), 404
-    u = student.user
+    face_ok = student.face_embedding is not None and student.face_embedding != ""
     return jsonify({
         "id": student.id,
-        "name": u.name,
-        "email": u.email,
+        "username": student.username,
+        "email": student.email,
         "student_id": student.student_id,
-        "department": student.department,
-        "batch": student.batch,
-        "face_enrolled": student.face_enrolled,
-        "total_courses": student.enrollments.count(),
+        "phone": student.phone,
+        "guardian_number": student.guardian_number,
+        "face_enrolled": face_ok,
+        "total_courses": student.enrolled_courses.count(),
     }), 200
 
 
@@ -36,28 +38,21 @@ def get_courses():
         return jsonify({"error": "Student not found"}), 404
 
     result = []
-    for e in student.enrollments:
-        course = e.course
-        total_sessions = AttendanceSession.query.filter_by(
-            course_id=course.id, status="confirmed").count()
-        attended = (
-            AttendanceRecord.query
-            .join(AttendanceSession, AttendanceRecord.session_id == AttendanceSession.id)
-            .filter(
-                AttendanceSession.course_id == course.id,
-                AttendanceSession.status == "confirmed",
-                AttendanceRecord.student_id == student.id,
-                AttendanceRecord.present == True,
-            ).count()
-        )
-        pct = round((attended / total_sessions * 100) if total_sessions else 0, 1)
-        teacher_name = course.teacher.user.name if course.teacher else "N/A"
+    for course in student.enrolled_courses:
+        # Total unique class dates for this course
+        total_classes = (db.session.query(db.func.count(db.distinct(Attendance.date)))
+                         .filter(Attendance.course_id == course.id).scalar()) or 0
+        # How many this student attended
+        attended = (Attendance.query
+                    .filter_by(course_id=course.id, student_id=student.id)
+                    .count())
+        pct = round((attended / total_classes * 100) if total_classes else 0, 1)
+        teacher_name = course.teacher.username if course.teacher else "N/A"
         result.append({
             "id": course.id,
             "name": course.name,
-            "code": course.code,
             "teacher": teacher_name,
-            "total_sessions": total_sessions,
+            "total_classes": total_classes,
             "attended": attended,
             "percentage": pct,
         })

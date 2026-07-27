@@ -26,8 +26,8 @@
         <p id="profileEmail" class="text-muted"></p>
         <div style="margin-top:1rem; display:flex; gap:1.5rem; flex-wrap:wrap;">
           <div><span class="text-muted">ID: </span><code id="profileSid">—</code></div>
-          <div><span class="text-muted">Batch: </span><span id="profileBatch">—</span></div>
-          <div><span class="text-muted">Dept: </span><span id="profileDept">—</span></div>
+          <div><span class="text-muted">Phone: </span><span id="profilePhone">—</span></div>
+          <div><span class="text-muted">Guardian: </span><span id="profileGuardian">—</span></div>
           <div><span class="text-muted">Face: </span><span id="profileFace">—</span></div>
           <div><span class="text-muted">Courses: </span><span id="profileCourses">—</span></div>
         </div>
@@ -42,10 +42,10 @@
       <div class="table-wrapper">
         <table>
           <thead>
-            <tr><th>Course</th><th>Code</th><th>Teacher</th><th>Attended</th><th>Total</th><th>%</th></tr>
+            <tr><th>Course</th><th>Teacher</th><th>Attended</th><th>Total</th><th>%</th></tr>
           </thead>
           <tbody id="coursesTable">
-            <tr><td colspan="6" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr>
+            <tr><td colspan="5" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -60,21 +60,22 @@
 
   async function loadProfile() {
     const [profile, courses] = await Promise.all([api.get("/student/profile"), api.get("/student/courses")]);
-    const initials = profile.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+    const initials = profile.username.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
     document.getElementById("profileAvatar").textContent  = initials;
-    document.getElementById("profileName").textContent    = profile.name;
+    document.getElementById("profileName").textContent    = profile.username;
     document.getElementById("profileEmail").textContent   = profile.email;
-    document.getElementById("profileSid").textContent     = profile.student_id;
-    document.getElementById("profileBatch").textContent   = profile.batch || "—";
-    document.getElementById("profileDept").textContent    = profile.department || "—";
+    document.getElementById("profileSid").textContent     = profile.student_id || "—";
+    document.getElementById("profilePhone").textContent   = profile.phone || "—";
+    document.getElementById("profileGuardian").textContent = profile.guardian_number || "—";
     document.getElementById("profileCourses").textContent = profile.total_courses;
     document.getElementById("profileFace").innerHTML      = profile.face_enrolled
       ? '<span class="badge badge-success"><i data-lucide="check-circle"></i> Enrolled</span>'
       : '<span class="badge badge-danger"><i data-lucide="x-circle"></i> Not Enrolled</span>';
+    if (window.lucide) lucide.createIcons();
 
     const tbody = document.getElementById("coursesTable");
     if (!courses.length) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-muted" style="text-align:center;padding:1.5rem">No courses yet.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="text-muted" style="text-align:center;padding:1.5rem">No courses yet.</td></tr>`;
       return;
     }
     tbody.innerHTML = courses.map(c => {
@@ -82,10 +83,9 @@
       const cls = pct >= 75 ? "badge-success" : pct >= 50 ? "badge-warning" : "badge-danger";
       return `<tr>
         <td>${c.name}</td>
-        <td><code>${c.code}</code></td>
         <td>${c.teacher}</td>
         <td>${c.attended}</td>
-        <td>${c.total_sessions}</td>
+        <td>${c.total_classes}</td>
         <td><span class="badge ${cls}">${pct}%</span></td>
       </tr>`;
     }).join("");

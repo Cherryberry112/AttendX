@@ -63,9 +63,10 @@
   if (!Auth.guard("student")) throw new Error("Unauthorized");
 
   const user = Auth.getUser();
+  const displayName = user.username || user.name || "Student";
   const hour = new Date().getHours();
   document.getElementById("greeting").textContent =
-    `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, ${user.name.split(" ")[0]} `;
+    `${hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"}, ${displayName.split(" ")[0]} `;
 
   renderSidebar("student", "Dashboard");
 
@@ -91,7 +92,8 @@
 
     const grid = document.getElementById("ringsGrid");
     if (!courses.length) {
-      grid.innerHTML = `<div class="card text-center" style="grid-column:1/-1;padding:3rem"><p style="font-size:2rem"><i data-lucide="book-open"></i></p><p class="text-muted mt-1">You are not enrolled in any courses yet.</p></div>`;
+      grid.innerHTML = `<div class="card text-center" style="grid-column:1/-1;padding:3rem"><p style="font-size:2rem"><i data-lucide="book-open"></i></p><p class="text-muted mt-1">You are not enrolled in any courses yet. Contact your admin.</p></div>`;
+      if (window.lucide) lucide.createIcons();
       return;
     }
 
@@ -106,8 +108,7 @@
             <div style="font-size:0.65rem;color:var(--text-muted)">attendance</div>
           </div>
           <div style="font-weight:600;font-size:0.9rem;margin-top:0.5rem">${c.name}</div>
-          <div class="course-code">${c.code}</div>
-          <div class="text-muted" style="font-size:0.75rem">${c.attended}/${c.total_sessions} sessions</div>
+          <div class="text-muted" style="font-size:0.75rem">${c.attended}/${c.total_classes} classes</div>
           <div class="text-muted" style="font-size:0.75rem">${c.teacher}</div>
         </div>
       `;

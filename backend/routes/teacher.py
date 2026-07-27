@@ -1,14 +1,15 @@
-from flask import Blueprint, request, jsonify, send_file
+from datetime import date
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from __init__ import db
-from models import Teacher, Course, Student, Enrollment, AttendanceSession, AttendanceRecord
-from utils.excel import generate_attendance_excel
-import io
+from models import User, Course, Attendance, course_students
 
 teacher_bp = Blueprint("teacher", __name__)
 
 def _get_teacher(identity):
-    return Teacher.query.filter_by(user_id=identity["id"]).first()
+    """Return User object if identity is a teacher."""
+    user = User.query.filter_by(id=identity["id"], type="teacher").first()
+    return user
 
 # ── Profile ──────────────────────────────────────────────────────────────────
 
@@ -19,11 +20,12 @@ def get_profile():
     teacher = _get_teacher(identity)
     if not teacher:
         return jsonify({"error": "Teacher profile not found"}), 404
-    u = teacher.user
     return jsonify({
-        "id": teacher.id, "name": u.name, "email": u.email,
-        "department": teacher.department, "phone": teacher.phone,
-        "total_courses": teacher.courses.count(),
+        "id": teacher.id,
+        "username": teacher.username,
+        "email": teacher.email,
+        "phone": teacher.phone,
+        "total_courses": teacher.taught_courses.count(),
     }), 200
 
 
@@ -35,14 +37,12 @@ def update_profile():
     if not teacher:
         return jsonify({"error": "Teacher profile not found"}), 404
     data = request.get_json()
-    u = teacher.user
-    if "name" in data:       u.name = data["name"]
-    if "department" in data: teacher.department = data["department"]
-    if "phone" in data:      teacher.phone = data["phone"]
+    if "username" in data: teacher.username = data["username"]
+    if "phone" in data:    teacher.phone = data["phone"]
     db.session.commit()
     return jsonify({"message": "Profile updated"}), 200
 
-# ── Courses ──────────────────────────────────────────────────────────────────
+# ── Courses (Read-Only for teacher) ──────────────────────────────────────────
 
 @teacher_bp.get("/courses")
 @jwt_required()
@@ -52,30 +52,15 @@ def get_courses():
     if not teacher:
         return jsonify({"error": "Teacher not found"}), 404
     courses = []
-    for c in teacher.courses:
-        enrolled = c.enrollments.count()
-        sessions = c.sessions.filter_by(status="confirmed").count()
-        courses.append({"id": c.id, "name": c.name, "code": c.code,
-                        "enrolled": enrolled, "sessions": sessions})
+    for c in teacher.taught_courses:
+        enrolled = c.students.count()
+        total_classes = (db.session.query(db.func.count(db.distinct(Attendance.date)))
+                         .filter(Attendance.course_id == c.id).scalar()) or 0
+        courses.append({
+            "id": c.id, "name": c.name,
+            "enrolled": enrolled, "total_classes": total_classes,
+        })
     return jsonify(courses), 200
-
-
-@teacher_bp.post("/courses")
-@jwt_required()
-def add_course():
-    identity = get_jwt_identity()
-    teacher = _get_teacher(identity)
-    if not teacher:
-        return jsonify({"error": "Teacher not found"}), 404
-    data = request.get_json()
-    if not data.get("name") or not data.get("code"):
-        return jsonify({"error": "Course name and code required"}), 400
-    if Course.query.filter_by(code=data["code"]).first():
-        return jsonify({"error": "Course code already exists"}), 409
-    course = Course(name=data["name"], code=data["code"], teacher_id=teacher.id)
-    db.session.add(course)
-    db.session.commit()
-    return jsonify({"message": "Course created", "id": course.id}), 201
 
 
 @teacher_bp.get("/courses/<int:course_id>")
@@ -83,132 +68,79 @@ def add_course():
 def get_course_detail(course_id):
     identity = get_jwt_identity()
     teacher = _get_teacher(identity)
+    if not teacher:
+        return jsonify({"error": "Teacher not found"}), 404
     course = Course.query.filter_by(id=course_id, teacher_id=teacher.id).first()
     if not course:
         return jsonify({"error": "Course not found"}), 404
 
-    enrollments = []
-    for e in course.enrollments:
-        s = e.student
-        u = s.user
-        enrollments.append({
-            "student_id": s.id, "sid": s.student_id,
-            "name": u.name, "face_enrolled": s.face_enrolled,
+    # Enrolled students
+    students_list = []
+    for s in course.students:
+        face_ok = s.face_embedding is not None and s.face_embedding != ""
+        students_list.append({
+            "id": s.id,
+            "student_id": s.student_id,
+            "username": s.username,
+            "face_enrolled": face_ok,
         })
 
-    sessions = []
-    for sess in course.sessions.order_by(AttendanceSession.date.desc()):
-        present = AttendanceRecord.query.filter_by(session_id=sess.id, present=True).count()
-        total   = AttendanceRecord.query.filter_by(session_id=sess.id).count()
-        sessions.append({"id": sess.id, "date": str(sess.date),
-                         "status": sess.status, "present": present, "total": total})
+    # Attendance dates + per-date summary
+    dates = (db.session.query(Attendance.date, db.func.count(Attendance.id))
+             .filter(Attendance.course_id == course_id)
+             .group_by(Attendance.date)
+             .order_by(Attendance.date.desc())
+             .all())
+    total_enrolled = course.students.count()
+    sessions = [{"date": str(d), "present": cnt, "total": total_enrolled} for d, cnt in dates]
 
-    return jsonify({"course": {"id": course.id, "name": course.name, "code": course.code},
-                    "enrollments": enrollments, "sessions": sessions}), 200
+    return jsonify({
+        "course": {"id": course.id, "name": course.name},
+        "students": students_list,
+        "sessions": sessions,
+    }), 200
 
-# ── Enroll student into course ───────────────────────────────────────────────
+# ── Take Attendance ──────────────────────────────────────────────────────────
 
-@teacher_bp.post("/courses/<int:course_id>/enroll")
+@teacher_bp.post("/courses/<int:course_id>/attendance")
 @jwt_required()
-def enroll_student(course_id):
+def record_attendance(course_id):
+    """Record attendance for enrolled students.
+    Body: { "date": "2026-07-28", "present_ids": [3, 5, 7] }
+    """
     identity = get_jwt_identity()
     teacher = _get_teacher(identity)
+    if not teacher:
+        return jsonify({"error": "Teacher not found"}), 404
     course = Course.query.filter_by(id=course_id, teacher_id=teacher.id).first()
     if not course:
         return jsonify({"error": "Course not found"}), 404
-    data = request.get_json()
-    student = Student.query.filter_by(student_id=data.get("student_id")).first()
-    if not student:
-        return jsonify({"error": "Student not found"}), 404
-    if Enrollment.query.filter_by(student_id=student.id, course_id=course_id).first():
-        return jsonify({"error": "Already enrolled"}), 409
-    db.session.add(Enrollment(student_id=student.id, course_id=course_id))
-    db.session.commit()
-    return jsonify({"message": "Student enrolled"}), 201
-
-# ── Attendance Sessions ──────────────────────────────────────────────────────
-
-@teacher_bp.post("/courses/<int:course_id>/sessions")
-@jwt_required()
-def create_session(course_id):
-    identity = get_jwt_identity()
-    teacher = _get_teacher(identity)
-    course = Course.query.filter_by(id=course_id, teacher_id=teacher.id).first()
-    if not course:
-        return jsonify({"error": "Course not found"}), 404
-    sess = AttendanceSession(course_id=course_id, teacher_id=teacher.id, status="draft")
-    db.session.add(sess)
-    db.session.flush()
-    # Pre-populate with enrolled students (all absent by default)
-    for e in course.enrollments:
-        db.session.add(AttendanceRecord(session_id=sess.id, student_id=e.student_id, present=False))
-    db.session.commit()
-    return jsonify({"session_id": sess.id}), 201
-
-
-@teacher_bp.put("/sessions/<int:session_id>")
-@jwt_required()
-def update_session(session_id):
-    """Update attendance records in draft and optionally confirm the session."""
-    identity = get_jwt_identity()
-    teacher = _get_teacher(identity)
-    sess = AttendanceSession.query.get(session_id)
-    if not sess or sess.teacher_id != teacher.id:
-        return jsonify({"error": "Session not found"}), 404
-    if sess.status == "confirmed":
-        return jsonify({"error": "Session already confirmed"}), 400
 
     data = request.get_json()
-    # records: [{student_id: X, present: true/false}, ...]
-    for rec in data.get("records", []):
-        ar = AttendanceRecord.query.filter_by(session_id=session_id, student_id=rec["student_id"]).first()
-        if ar:
-            ar.present = rec.get("present", False)
-            ar.confidence = rec.get("confidence")
+    att_date = data.get("date", str(date.today()))
+    present_ids = data.get("present_ids", [])
 
-    if data.get("confirm"):
-        sess.status = "confirmed"
+    recorded = 0
+    for sid in present_ids:
+        # Only allow enrolled students
+        is_enrolled = db.session.query(course_students).filter_by(
+            course_id=course_id, student_id=sid).first()
+        if not is_enrolled:
+            continue
+        # Upsert attendance
+        existing = Attendance.query.filter_by(
+            date=att_date, student_id=sid, course_id=course_id).first()
+        if not existing:
+            db.session.add(Attendance(date=att_date, student_id=sid, course_id=course_id))
+            recorded += 1
 
     db.session.commit()
-    return jsonify({"message": "Session updated"}), 200
 
+    # Notify students (placeholder)
+    try:
+        from utils.notifications import notify_students_attendance
+        notify_students_attendance(present_ids, course.name, att_date)
+    except Exception:
+        pass  # Don't fail attendance if notification fails
 
-@teacher_bp.get("/sessions/<int:session_id>")
-@jwt_required()
-def get_session(session_id):
-    identity = get_jwt_identity()
-    teacher = _get_teacher(identity)
-    sess = AttendanceSession.query.get(session_id)
-    if not sess or sess.teacher_id != teacher.id:
-        return jsonify({"error": "Session not found"}), 404
-    records = []
-    for ar in sess.records:
-        s = ar.student
-        u = s.user if s else None
-        records.append({
-            "student_id": ar.student_id,
-            "sid": s.student_id if s else None,
-            "name": u.name if u else "Unknown",
-            "present": ar.present,
-            "confidence": ar.confidence,
-        })
-    return jsonify({"session": {"id": sess.id, "date": str(sess.date), "status": sess.status},
-                    "records": records}), 200
-
-# ── Excel Export ─────────────────────────────────────────────────────────────
-
-@teacher_bp.get("/courses/<int:course_id>/excel")
-@jwt_required()
-def download_excel(course_id):
-    identity = get_jwt_identity()
-    teacher = _get_teacher(identity)
-    course = Course.query.filter_by(id=course_id, teacher_id=teacher.id).first()
-    if not course:
-        return jsonify({"error": "Course not found"}), 404
-    buf = generate_attendance_excel(course)
-    return send_file(
-        buf,
-        as_attachment=True,
-        download_name=f"{course.code}_attendance.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    return jsonify({"message": f"Attendance recorded: {recorded} students", "recorded": recorded}), 201

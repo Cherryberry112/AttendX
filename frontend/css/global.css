@@ -497,6 +497,22 @@ select.form-control option { background: var(--bg-card); }
 }
 .modal-close:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
 
+/* Checkbox list (for multi-select in modals) */
+.checkbox-list {
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+}
+.checkbox-list label {
+  border-bottom: 1px solid var(--border-light);
+  transition: background var(--duration);
+}
+.checkbox-list label:last-child { border-bottom: none; }
+.checkbox-list label:hover { background: rgba(168,85,247,0.04); }
+
+@media (max-width: 768px) {
+  .modal { max-width: calc(100vw - 2rem); padding: 1.5rem; margin: 1rem; }
+}
+
 /* ── Progress Ring (for attendance %) ────────────────────────── */
 .ring-container {
   display: flex;

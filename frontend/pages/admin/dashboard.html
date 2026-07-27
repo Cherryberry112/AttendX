@@ -38,7 +38,7 @@
       </div>
       <div class="card stat-card">
         <div class="stat-icon purple"><i data-lucide="calendar"></i></div>
-        <div><div class="stat-value" id="statSessions">—</div><div class="stat-label">Sessions Confirmed</div></div>
+        <div><div class="stat-value" id="statAttendance">—</div><div class="stat-label">Attendance Records</div></div>
       </div>
     </div>
 
@@ -48,17 +48,17 @@
       <a href="users.html" class="card" style="text-decoration:none; text-align:center; padding:2rem;">
         <div style="font-size:2.5rem; margin-bottom:0.75rem"><i data-lucide="users"></i></div>
         <h3>Manage Users</h3>
-        <p>Create, view, delete users</p>
+        <p>Add, edit, delete users</p>
       </a>
       <a href="courses.html" class="card" style="text-decoration:none; text-align:center; padding:2rem;">
         <div style="font-size:2.5rem; margin-bottom:0.75rem"><i data-lucide="book-open"></i></div>
         <h3>Manage Courses</h3>
-        <p>View and delete courses</p>
+        <p>Create, edit, delete courses</p>
       </a>
       <a href="attendance_log.html" class="card" style="text-decoration:none; text-align:center; padding:2rem;">
         <div style="font-size:2.5rem; margin-bottom:0.75rem"><i data-lucide="calendar"></i></div>
         <h3>Attendance Log</h3>
-        <p>All confirmed sessions</p>
+        <p>All attendance records</p>
       </a>
     </div>
   </main>
@@ -70,11 +70,11 @@
   renderSidebar("admin", "Dashboard");
 
   api.get("/admin/stats").then(stats => {
-    document.getElementById("statUsers").textContent    = stats.total_users;
-    document.getElementById("statStudents").textContent = stats.total_students;
-    document.getElementById("statTeachers").textContent = stats.total_teachers;
-    document.getElementById("statCourses").textContent  = stats.total_courses;
-    document.getElementById("statSessions").textContent = stats.total_sessions;
+    document.getElementById("statUsers").textContent     = stats.total_users;
+    document.getElementById("statStudents").textContent  = stats.total_students;
+    document.getElementById("statTeachers").textContent  = stats.total_teachers;
+    document.getElementById("statCourses").textContent   = stats.total_courses;
+    document.getElementById("statAttendance").textContent = stats.total_attendance;
   }).catch(() => showToast("Failed to load stats", "error"));
 </script>
 

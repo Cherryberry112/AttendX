@@ -38,8 +38,8 @@
 
       <div class="grid-2">
         <div class="form-group">
-          <label class="form-label" for="name">Full Name</label>
-          <input id="name" type="text" class="form-control" placeholder="Ahmed Rahman" required/>
+          <label class="form-label" for="regUsername">Full Name</label>
+          <input id="regUsername" type="text" class="form-control" placeholder="Ahmed Rahman" required/>
         </div>
         <div class="form-group">
           <label class="form-label" for="regEmail">Email</label>
@@ -55,37 +55,28 @@
         </div>
       </div>
 
+      <div class="form-group">
+        <label class="form-label" for="regPhone">Phone Number</label>
+        <input id="regPhone" type="tel" class="form-control" placeholder="+880 1XXX XXXXXX"/>
+      </div>
+
       <!-- Student fields -->
       <div id="student-fields">
         <div class="grid-2">
           <div class="form-group">
             <label class="form-label" for="studentId">Student ID</label>
-            <input id="studentId" type="text" class="form-control" placeholder="2021-CSE-001"/>
+            <input id="studentId" type="text" class="form-control" placeholder="2022-3-60-110"/>
+            <small id="sidFeedback" style="font-size:0.72rem; margin-top:0.25rem; display:block;"></small>
           </div>
           <div class="form-group">
-            <label class="form-label" for="batch">Batch</label>
-            <input id="batch" type="text" class="form-control" placeholder="2021"/>
+            <label class="form-label" for="guardianNumber">Guardian Phone</label>
+            <input id="guardianNumber" type="tel" class="form-control" placeholder="+880 1XXX XXXXXX"/>
           </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="studentDept">Department</label>
-          <input id="studentDept" type="text" class="form-control" placeholder="Computer Science"/>
         </div>
       </div>
 
-      <!-- Teacher fields -->
-      <div id="teacher-fields" class="hidden">
-        <div class="grid-2">
-          <div class="form-group">
-            <label class="form-label" for="teacherDept">Department</label>
-            <input id="teacherDept" type="text" class="form-control" placeholder="Computer Science"/>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="phone">Phone</label>
-            <input id="phone" type="tel" class="form-control" placeholder="+880 1XXX XXXXXX"/>
-          </div>
-        </div>
-      </div>
+      <!-- Teacher fields (no extra fields in new schema) -->
+      <div id="teacher-fields" class="hidden"></div>
 
       <button type="submit" class="btn btn-primary btn-block btn-lg" id="regBtn" style="margin-top:0.5rem">
         Create Account
@@ -108,8 +99,23 @@
       const role = opt.dataset.role;
       document.getElementById("selectedRole").value = role;
       document.getElementById("student-fields").classList.toggle("hidden", role !== "student");
-      document.getElementById("teacher-fields").classList.toggle("hidden", role !== "teacher");
     });
+  });
+
+  // Live student ID validation
+  const sidInput = document.getElementById("studentId");
+  const sidRegex = /^\d{4}-\d{1,2}-\d{2}-\d{3}$/;
+  sidInput.addEventListener("input", () => {
+    const val = sidInput.value.trim();
+    const fb = document.getElementById("sidFeedback");
+    if (!val) { fb.textContent = ""; fb.style.color = ""; return; }
+    if (sidRegex.test(val)) {
+      fb.textContent = "✓ Valid format";
+      fb.style.color = "var(--success)";
+    } else {
+      fb.textContent = "Format: YYYY-D-DD-DDD (e.g. 2022-3-60-110)";
+      fb.style.color = "var(--danger)";
+    }
   });
 
   document.getElementById("registerForm").addEventListener("submit", async (e) => {
@@ -118,21 +124,18 @@
     btn.textContent = "Creating account…";
     btn.disabled = true;
 
-    const role = document.getElementById("selectedRole").value;
+    const type = document.getElementById("selectedRole").value;
     const payload = {
-      name:     document.getElementById("name").value.trim(),
+      username: document.getElementById("regUsername").value.trim(),
       email:    document.getElementById("regEmail").value.trim(),
       password: document.getElementById("regPassword").value,
-      role,
+      phone:    document.getElementById("regPhone").value.trim(),
+      type,
     };
 
-    if (role === "student") {
-      payload.student_id = document.getElementById("studentId").value.trim();
-      payload.batch      = document.getElementById("batch").value.trim();
-      payload.department = document.getElementById("studentDept").value.trim();
-    } else if (role === "teacher") {
-      payload.department = document.getElementById("teacherDept").value.trim();
-      payload.phone      = document.getElementById("phone").value.trim();
+    if (type === "student") {
+      payload.student_id      = document.getElementById("studentId").value.trim();
+      payload.guardian_number = document.getElementById("guardianNumber").value.trim();
     }
 
     try {

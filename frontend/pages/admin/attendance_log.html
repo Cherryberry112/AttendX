@@ -15,13 +15,13 @@
   <main class="main-content">
     <div class="page-header">
       <h1><i data-lucide="calendar"></i> Attendance Log</h1>
-      <p>All confirmed attendance sessions across the system.</p>
+      <p>All attendance records across the system.</p>
     </div>
 
     <div class="admin-actions-bar">
       <div class="search-box">
         <span class="search-icon"><i data-lucide="search"></i></span>
-        <input type="text" id="searchInput" placeholder="Search by course or teacher…" oninput="filterTable()"/>
+        <input type="text" id="searchInput" placeholder="Search by student, course, or teacher…" oninput="filterTable()"/>
       </div>
       <span class="text-muted" id="countLabel">Loading…</span>
     </div>
@@ -30,10 +30,10 @@
       <div class="table-wrapper">
         <table>
           <thead>
-            <tr><th>#</th><th>Date</th><th>Course</th><th>Teacher</th><th>Present</th><th>Total</th><th>Rate</th><th>Status</th></tr>
+            <tr><th>#</th><th>Date</th><th>Student</th><th>Student ID</th><th>Course</th><th>Teacher</th></tr>
           </thead>
           <tbody id="logTable">
-            <tr><td colspan="8" class="text-muted" style="text-align:center;padding:2rem">Loading…</td></tr>
+            <tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem">Loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -46,42 +46,36 @@
   if (!Auth.guard("admin")) throw new Error("Unauthorized");
   renderSidebar("admin", "Attendance");
 
-  let allSessions = [];
+  let allRecords = [];
 
   async function loadLog() {
-    allSessions = await api.get("/admin/attendance");
-    renderLog(allSessions);
-    document.getElementById("countLabel").textContent = `${allSessions.length} sessions`;
+    allRecords = await api.get("/admin/attendance");
+    renderLog(allRecords);
+    document.getElementById("countLabel").textContent = `${allRecords.length} records`;
   }
 
-  function renderLog(sessions) {
+  function renderLog(records) {
     const tbody = document.getElementById("logTable");
-    if (!sessions.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="text-muted" style="text-align:center;padding:2rem">No sessions found.</td></tr>`;
+    if (!records.length) {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem">No records found.</td></tr>`;
       return;
     }
-    tbody.innerHTML = sessions.map((s, i) => {
-      const rate = s.total ? Math.round(s.present / s.total * 100) : 0;
-      const cls  = rate >= 75 ? "badge-success" : rate >= 50 ? "badge-warning" : "badge-danger";
-      return `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${fmtDate(s.date)}</td>
-          <td>${s.course} <code style="font-size:0.7rem">${s.course_code}</code></td>
-          <td>${s.teacher}</td>
-          <td>${s.present}</td>
-          <td>${s.total}</td>
-          <td><span class="badge ${cls}">${rate}%</span></td>
-          <td><span class="badge ${s.status === 'confirmed' ? 'badge-success' : 'badge-warning'}">${s.status}</span></td>
-        </tr>
-      `;
-    }).join("");
+    tbody.innerHTML = records.map((r, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${fmtDate(r.date)}</td>
+        <td>${r.student_name}</td>
+        <td><code>${r.student_id || '—'}</code></td>
+        <td>${r.course}</td>
+        <td>${r.teacher}</td>
+      </tr>
+    `).join("");
   }
 
   function filterTable() {
     const q = document.getElementById("searchInput").value.toLowerCase();
-    renderLog(allSessions.filter(s =>
-      s.course.toLowerCase().includes(q) || s.teacher.toLowerCase().includes(q)
+    renderLog(allRecords.filter(r =>
+      r.student_name.toLowerCase().includes(q) || r.course.toLowerCase().includes(q) || r.teacher.toLowerCase().includes(q) || (r.student_id || "").toLowerCase().includes(q)
     ));
   }
 

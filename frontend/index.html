@@ -55,7 +55,8 @@
     const user = Auth.getUser();
     const token = Auth.getToken();
     if (user && token) {
-      window.location.href = `pages/${user.role}/dashboard.html`;
+      const role = user.type || user.role;
+      window.location.href = `pages/${role}/dashboard.html`;
     }
   })();
 
@@ -71,10 +72,10 @@
         password: document.getElementById("password").value,
       });
       Auth.setToken(data.token);
-      Auth.setUser({ id: data.id, name: data.name, role: data.role });
-      showToast(`Welcome back, ${data.name}! `, "success");
+      Auth.setUser({ id: data.id, username: data.username, type: data.type });
+      showToast(`Welcome back, ${data.username}! `, "success");
       setTimeout(() => {
-        window.location.href = `pages/${data.role}/dashboard.html`;
+        window.location.href = `pages/${data.type}/dashboard.html`;
       }, 600);
     } catch (err) {
       showToast(err.message, "error");

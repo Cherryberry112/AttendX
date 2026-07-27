@@ -25,7 +25,6 @@
         <h2 id="profileName">Loading…</h2>
         <p id="profileEmail" class="text-muted"></p>
         <div style="margin-top:1rem; display:flex; gap:1rem; flex-wrap:wrap;">
-          <div><span class="text-muted text-sm">Department: </span><span id="profileDept">—</span></div>
           <div><span class="text-muted text-sm">Phone: </span><span id="profilePhone">—</span></div>
           <div><span class="text-muted text-sm">Courses: </span><span id="profileCourses">—</span></div>
         </div>
@@ -41,13 +40,9 @@
             <input id="editName" type="text" class="form-control"/>
           </div>
           <div class="form-group">
-            <label class="form-label">Department</label>
-            <input id="editDept" type="text" class="form-control"/>
+            <label class="form-label">Phone Number</label>
+            <input id="editPhone" type="tel" class="form-control"/>
           </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Phone Number</label>
-          <input id="editPhone" type="tel" class="form-control"/>
         </div>
         <div style="display:flex; justify-content:flex-end;">
           <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -64,15 +59,13 @@
 
   async function loadProfile() {
     const p = await api.get("/teacher/profile");
-    const initials = p.name.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase();
+    const initials = p.username.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase();
     document.getElementById("profileAvatar").textContent   = initials;
-    document.getElementById("profileName").textContent     = p.name;
+    document.getElementById("profileName").textContent     = p.username;
     document.getElementById("profileEmail").textContent    = p.email;
-    document.getElementById("profileDept").textContent     = p.department || "—";
     document.getElementById("profilePhone").textContent    = p.phone || "—";
     document.getElementById("profileCourses").textContent  = p.total_courses;
-    document.getElementById("editName").value  = p.name;
-    document.getElementById("editDept").value  = p.department || "";
+    document.getElementById("editName").value  = p.username;
     document.getElementById("editPhone").value = p.phone || "";
   }
 
@@ -80,11 +73,10 @@
     e.preventDefault();
     try {
       await api.put("/teacher/profile", {
-        name:       document.getElementById("editName").value.trim(),
-        department: document.getElementById("editDept").value.trim(),
-        phone:      document.getElementById("editPhone").value.trim(),
+        username: document.getElementById("editName").value.trim(),
+        phone:    document.getElementById("editPhone").value.trim(),
       });
-      showToast("Profile updated! <i data-lucide='check-circle'></i>", "success");
+      showToast("Profile updated!", "success");
       loadProfile();
     } catch (err) {
       showToast(err.message, "error");

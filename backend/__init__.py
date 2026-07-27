@@ -61,7 +61,7 @@ def create_app(env=None):
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["JWT_SECRET_KEY"] = app.config["JWT_SECRET_KEY"]
 
-    CORS(app, origins=[app.config["FRONTEND_URL"]], supports_credentials=True)
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
     db.init_app(app)
     jwt.init_app(app)
 
@@ -75,7 +75,12 @@ def create_app(env=None):
         if not User.query.filter_by(email=admin_email).first():
             import bcrypt
             hashed = bcrypt.hashpw(b"Admin@1234", bcrypt.gensalt()).decode()
-            admin = User(name="System Admin", email=admin_email, password=hashed, role="admin")
+            admin = User(
+                type="admin",
+                email=admin_email,
+                username="System Admin",
+                password=hashed,
+            )
             db.session.add(admin)
             db.session.commit()
             print("[INFO] Seeded default system admin (admin@attendx.com / Admin@1234) in local database.")
