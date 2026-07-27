@@ -5,7 +5,11 @@
 
 const USE_MOCK = window.location.search.includes("mock=true");
 
-const API_BASE = window.location.protocol === "file:" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" 
+const FORCE_LOCAL_API = window.location.search.includes("api=local") || localStorage.getItem("ax_use_local_api") === "true";
+if (window.location.search.includes("api=local")) localStorage.setItem("ax_use_local_api", "true");
+if (window.location.search.includes("api=render")) localStorage.removeItem("ax_use_local_api");
+
+const API_BASE = FORCE_LOCAL_API || window.location.protocol === "file:" || window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" 
   ? "http://localhost:5000/api" 
   : "https://attendx-api.onrender.com/api";
 
@@ -379,7 +383,19 @@ const api = {
     if (token) headers["Authorization"] = `Bearer ${token}`;
     const opts = { method, headers };
     if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(`${API_BASE}${path}`, opts);
+    let url = `${API_BASE}${path}`;
+    let res;
+    try {
+      res = await fetch(url, opts);
+      if (res.status === 503 || res.status === 502) throw new Error("Service Unavailable");
+    } catch (err) {
+      if (API_BASE !== "http://localhost:5000/api") {
+        url = `http://localhost:5000/api${path}`;
+        res = await fetch(url, opts);
+      } else {
+        throw err;
+      }
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (res.status === 401) {
