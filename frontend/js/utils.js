@@ -381,7 +381,12 @@ const api = {
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(`${API_BASE}${path}`, opts);
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 401) {
+        Auth.clear();
+      }
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
     return data;
   },
   get:    (path)       => api._req("GET",    path),
