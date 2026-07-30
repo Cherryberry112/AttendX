@@ -114,6 +114,42 @@ def _wrap(content: str, preview: str = "") -> str:
 </html>"""
 
 
+# ── Registration email ────────────────────────────────────────────────────────
+
+def send_registration_email(username: str, email: str, role: str):
+    """Send a welcome email when a new account is registered."""
+    role_label = role.capitalize()
+    role_icon  = {"student": "🎓", "teacher": "📚", "admin": "🛡️"}.get(role, "👋")
+    role_tip   = {
+        "student": "As a student, your first step should be to enroll your face from the dashboard so you can be recognized in class.",
+        "teacher": "As a teacher, you can start tracking attendance right away from your courses panel.",
+        "admin":   "As an admin, you can begin managing the system users and courses.",
+    }.get(role, "We're glad to have you on board.")
+
+    content = f"""
+    <h2>{role_icon} Welcome to AttendX, {username}!</h2>
+    <p class="sub">Your account has been successfully created</p>
+
+    <p>Thank you for joining <strong>AttendX</strong> — the smart face-recognition attendance platform. Your account is now active and ready to use!</p>
+
+    <hr class="divider"/>
+
+    <p style="font-size:0.82rem;color:{_MUTED};margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Your Role</p>
+    <p><span class="badge">{role_label}</span></p>
+
+    <p style="margin-top:20px;">{role_tip}</p>
+
+    <hr class="divider"/>
+
+    <p style="font-size:0.82rem;color:{_MUTED};">
+      🚀 <strong>Next steps:</strong> Head over to your <a href="https://cherryberry112.github.io/AttendX/">Dashboard</a> and sign in with your email and password to get started.
+    </p>
+    """
+
+    html = _wrap(content, preview=f"Welcome to AttendX, {username}! Your account is ready.")
+    _send_async(email, f"🎉 Welcome to AttendX, {username}!", html)
+
+
 # ── Welcome email ─────────────────────────────────────────────────────────────
 
 def send_welcome_email(username: str, email: str, role: str):

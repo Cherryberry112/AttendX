@@ -58,6 +58,14 @@ def register():
     )
     db.session.add(user)
     db.session.commit()
+
+    # Send registration email asynchronously (non-blocking)
+    try:
+        from utils.notifications import send_registration_email
+        send_registration_email(user.username, user.email, user.type)
+    except Exception as e:
+        print(f"[EMAIL] Registration email skipped: {e}")
+
     return jsonify({"message": "User registered successfully", "id": user.id}), 201
 
 
