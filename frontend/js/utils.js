@@ -477,6 +477,7 @@ const api = {
     api.clearCache();
     return res;
   },
+};
 
 /* ── Toast Notifications ─────────────────────────────────────── */
 function ensureToastContainer() {
