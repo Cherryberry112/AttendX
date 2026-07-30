@@ -405,14 +405,9 @@ const api = {
     let res;
     try {
       res = await fetch(url, opts);
-      if (res.status === 503 || res.status === 502) throw new Error("Service Unavailable");
+      if (res.status === 503 || res.status === 502) throw new Error("Server is warming up. Please try again in 10 seconds.");
     } catch (err) {
-      if (API_BASE !== "http://localhost:5000/api") {
-        url = `http://localhost:5000/api${path}`;
-        res = await fetch(url, opts);
-      } else {
-        throw err;
-      }
+      throw new Error(err.message === "Server is warming up. Please try again in 10 seconds." ? err.message : "Server error or network timeout. Please retry in a few seconds.");
     }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
