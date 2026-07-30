@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Course Attendance — AttendX</title>
+  <meta name="description" content="Run live face recognition attendance for your course."/>
+  <link rel="stylesheet" href="../../css/global.css"/>
+  <link rel="stylesheet" href="../../css/dashboard.css"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* ── Camera layout ─────────────────────────────────────── */
+    .camera-section { display:flex; gap:1.5rem; align-items:flex-start; flex-wrap:wrap; }
+    .camera-col     { flex:1; min-width:280px; }
+    .roster-col     { flex:0 0 300px; min-width:260px; }
+
+    .cam-wrap {
+      position:relative; width:100%; border-radius:12px;
+      overflow:hidden; background:#0a0a0f;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+      aspect-ratio: 4/3;
+    }
+    .cam-wrap video, .cam-wrap canvas {
+      position:absolute; top:0; left:0; width:100%; height:100%;
+      object-fit:cover;
+    }
+    .cam-wrap canvas { pointer-events:none; }
+
+    /* status badge overlaid on camera */
+    .cam-status {
+      position:absolute; top:0.6rem; left:0.6rem; z-index:10;
+      background:rgba(0,0,0,0.65); color:#fff;
+      font-size:0.7rem; font-weight:700; letter-spacing:0.05em;
+      padding:0.25rem 0.6rem; border-radius:999px;
+      display:flex; align-items:center; gap:0.35rem;
+    }
+    .cam-status .dot { width:7px; height:7px; border-radius:50%; background:#888; }
+    .cam-status.live .dot { background:#0F9B58; animation:blink 1s infinite; }
+    .cam-status.scanning .dot { background:#ffc107; animation:blink 0.5s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* Camera controls bar */
+    .cam-controls {
+      display:flex; gap:0.6rem; flex-wrap:wrap;
+      align-items:center; margin-top:0.75rem;
+    }
+    .cam-controls .spacer { flex:1; }
+
+    /* Detection result overlay text inside canvas */
+    .match-badge {
+      position:absolute; bottom:0.5rem; left:50%; transform:translateX(-50%);
+      background:rgba(15,155,88,0.9); color:#fff; font-size:0.72rem; font-weight:700;
+      padding:0.2rem 0.8rem; border-radius:999px; white-space:nowrap;
+      display:none; z-index:10;
+    }
+
+    /* Roster / draft panel */
+    .roster-card {
+      background:var(--bg-card); border:1px solid var(--border-light);
+      border-radius:12px; overflow:hidden;
+    }
+    .roster-header {
+      padding:0.75rem 1rem; background:var(--bg-secondary);
+      border-bottom:1px solid var(--border-light);
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    .roster-header h3 { margin:0; font-size:0.85rem; font-weight:700; }
+    .roster-body { max-height:400px; overflow-y:auto; }
+
+    .scan-item {
+      display:flex; align-items:center; gap:0.6rem;
+      padding:0.55rem 1rem; border-bottom:1px solid var(--border-light);
+      transition:background 0.2s;
+    }
+    .scan-item.present { background:rgba(15,155,88,0.08); }
+    .scan-dot { width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+    .scan-dot.green { background:#0F9B58; }
+    .scan-dot.red   { background:#ff4d6d; }
+
+    .scan-item .name  { font-size:0.82rem; font-weight:600; }
+    .scan-item .sid   { font-size:0.7rem; color:var(--text-muted); }
+    .scan-item .conf  { font-size:0.68rem; color:#0F9B58; margin-left:auto; margin-right:0.5rem; }
+
+    .roster-footer {
+      padding:0.75rem 1rem; display:flex; gap:0.5rem;
+      border-top:1px solid var(--border-light); background:var(--bg-secondary);
+    }
+
+    /* Stats bar */
+    .stats-bar {
+      display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.2rem;
+    }
+    .stat-pill {
+      flex:1; min-width:80px; background:var(--bg-card);
+      border:1px solid var(--border-light); border-radius:10px;
+      padding:0.6rem 1rem; text-align:center;
+    }
+    .stat-pill .val { font-size:1.4rem; font-weight:800; }
+    .stat-pill .lbl { font-size:0.68rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.07em; }
+    .stat-pill.present .val { color:#0F9B58; }
+    .stat-pill.absent  .val { color:#ff4d6d; }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+
+  <main class="main-content">
+    <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
+      <div>
+        <h1 id="courseTitle">Loading…</h1>
+        <p id="courseSubtitle" class="text-muted"></p>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;border-bottom:1px solid var(--border-light);padding-bottom:0.5rem;flex-wrap:wrap;">
+      <button class="btn btn-primary btn-sm"  id="tab-camera"   onclick="switchTab('camera')"><i data-lucide="camera"></i> Live Attendance</button>
+      <button class="btn btn-outline btn-sm"  id="tab-history"  onclick="switchTab('history')"><i data-lucide="calendar"></i> Session History</button>
+      <button class="btn btn-outline btn-sm"  id="tab-students" onclick="switchTab('students')"><i data-lucide="users"></i> Students</button>
+    </div>
+
+    <!-- ── Camera Tab ───────────────────────────────────────────── -->
+    <div id="panel-camera">
+
+      <!-- Stats bar -->
+      <div class="stats-bar">
+        <div class="stat-pill present">
+          <div class="val" id="statPresent">0</div>
+          <div class="lbl">Present</div>
+        </div>
+        <div class="stat-pill absent">
+          <div class="val" id="statAbsent">0</div>
+          <div class="lbl">Absent</div>
+        </div>
+        <div class="stat-pill">
+          <div class="val" id="statTotal">0</div>
+          <div class="lbl">Total</div>
+        </div>
+        <div class="stat-pill">
+          <div class="val" id="statRate">—</div>
+          <div class="lbl">Rate</div>
+        </div>
+      </div>
+
+      <div class="camera-section">
+        <!-- Camera feed column -->
+        <div class="camera-col">
+          <div class="cam-wrap" id="camWrap">
+            <video id="cameraFeed" autoplay playsinline muted></video>
+            <canvas id="cameraCanvas"></canvas>
+            <div class="cam-status" id="camStatus">
+              <div class="dot"></div><span id="camStatusText">Camera off</span>
+            </div>
+            <div class="match-badge" id="matchBadge"></div>
+          </div>
+
+          <!-- Controls -->
+          <div class="cam-controls">
+            <button class="btn btn-primary btn-sm" id="startBtn" onclick="startCamera()">
+              <i data-lucide="video"></i> Start Camera
+            </button>
+            <button class="btn btn-outline btn-sm hidden" id="flipBtn" onclick="flipCamera()" title="Switch camera">
+              <i data-lucide="refresh-cw"></i> Flip
+            </button>
+            <button class="btn btn-accent btn-sm hidden" id="startScanBtn" onclick="toggleScan()">
+              <i data-lucide="scan-face"></i> Start Scan
+            </button>
+            <button class="btn btn-outline btn-sm hidden" id="stopBtn" onclick="stopCamera()">
+              <i data-lucide="video-off"></i> Stop
+            </button>
+          </div>
+
+          <p class="text-muted" style="font-size:0.72rem;margin-top:0.5rem;line-height:1.5;">
+            <i data-lucide="info" style="width:12px;height:12px;vertical-align:middle;"></i>
+            Point the camera at students. Detection runs every 2 seconds. Matched students auto-check as Present.
+            Use the <strong>Flip</strong> button to switch between front and back camera.
+          </p>
+        </div>
+
+        <!-- Roster / draft column -->
+        <div class="roster-col">
+          <div class="roster-card">
+            <div class="roster-header">
+              <h3><i data-lucide="clipboard-list" style="width:14px;height:14px;vertical-align:middle;"></i> Attendance Draft</h3>
+              <button class="btn btn-outline" style="padding:0.2rem 0.5rem;font-size:0.72rem;" onclick="resetDraft()">Reset</button>
+            </div>
+            <div class="roster-body" id="scanList">
+              <p class="text-muted" style="text-align:center;padding:1.5rem;font-size:0.8rem;">Start camera to begin…</p>
+            </div>
+            <div class="roster-footer">
+              <button class="btn btn-primary btn-sm" style="flex:1;" id="confirmBtn" onclick="confirmAttendance()" disabled>
+                <i data-lucide="check-circle"></i> Confirm & Save
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── History Tab ─────────────────────────────────────────── -->
+    <div id="panel-history" class="hidden">
+      <div class="card">
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>Date</th><th>Present</th><th>Total</th><th>Rate</th></tr></thead>
+            <tbody id="historyTable"><tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Students Tab ────────────────────────────────────────── -->
+    <div id="panel-students" class="hidden">
+      <div class="card">
+        <div class="table-wrapper">
+          <table>
+            <thead><tr><th>#</th><th>Student ID</th><th>Name</th><th>Face</th></tr></thead>
+            <tbody id="studentsTable"><tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../../js/utils.js"></script>
+<script>
+  if (!Auth.guard("teacher")) throw new Error("Unauthorized");
+  renderSidebar("teacher", "My Courses");
+
+  const params   = new URLSearchParams(location.search);
+  const courseId = parseInt(params.get("id"));
+  if (!courseId) showToast("No course selected", "error");
+
+  let courseData   = null;
+  let stream       = null;
+  let scanInterval = null;
+  let scanning     = false;
+  let facingMode   = "environment"; // start with back camera
+  let draftRecords = {};
+
+  // ── Load course data ──────────────────────────────────────────
+  async function loadCourse() {
+    try {
+      const data = await api.get(`/teacher/courses/${courseId}`);
+      courseData = data;
+      document.getElementById("courseTitle").textContent    = data.course.name;
+      document.getElementById("courseSubtitle").textContent = `${data.course.code || ''} · ${data.students.length} students`;
+      renderHistory(data.sessions);
+      renderStudents(data.students);
+      data.students.forEach(s => {
+        draftRecords[s.id] = {
+          username: s.username,
+          student_id_str: s.student_id,
+          present: false,
+          confidence: 0,
+        };
+      });
+      renderDraft();
+      updateStats();
+    } catch (err) {
+      showToast("Failed to load course: " + err.message, "error");
+    }
+  }
+
+  // ── Render helpers ────────────────────────────────────────────
+  function renderHistory(sessions) {
+    const tbody = document.getElementById("historyTable");
+    if (!sessions || !sessions.length) {
+      tbody.innerHTML = `<tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">No classes yet.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = sessions.map(s => {
+      const rate = s.total ? Math.round(s.present / s.total * 100) : 0;
+      const cls  = rate >= 75 ? "badge-success" : rate >= 50 ? "badge-warning" : "badge-danger";
+      return `<tr>
+        <td>${fmtDate(s.date)}</td><td>${s.present}</td><td>${s.total}</td>
+        <td><span class="badge ${cls}">${rate}%</span></td>
+      </tr>`;
+    }).join("");
+  }
+
+  function renderStudents(students) {
+    const tbody = document.getElementById("studentsTable");
+    if (!students.length) {
+      tbody.innerHTML = `<tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">No students enrolled.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = students.map((s, i) => `
+      <tr>
+        <td>${i+1}</td>
+        <td><code>${s.student_id || '—'}</code></td>
+        <td>${s.username}</td>
+        <td>${s.face_enrolled
+          ? '<span class="badge badge-success"><i data-lucide="check-circle"></i> Enrolled</span>'
+          : '<span class="badge badge-danger"><i data-lucide="x-circle"></i> Missing</span>'}</td>
+      </tr>`).join("");
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function renderDraft() {
+    const list    = document.getElementById("scanList");
+    const entries = Object.entries(draftRecords);
+    if (!entries.length) {
+      list.innerHTML = `<p class="text-muted" style="text-align:center;padding:1.5rem;font-size:0.8rem">No students enrolled in this course.</p>`;
+      return;
+    }
+    // Sort: present first
+    entries.sort((a, b) => (b[1].present ? 1 : 0) - (a[1].present ? 1 : 0));
+    list.innerHTML = entries.map(([sid, r]) => `
+      <div class="scan-item ${r.present ? 'present' : ''}">
+        <div class="scan-dot ${r.present ? 'green' : 'red'}"></div>
+        <div style="flex:1;min-width:0;">
+          <div class="name">${r.username}</div>
+          <div class="sid">${r.student_id_str || '—'}</div>
+        </div>
+        ${r.confidence > 0 ? `<div class="conf">${(r.confidence*100).toFixed(0)}%</div>` : ''}
+        <label style="display:flex;align-items:center;gap:0.3rem;cursor:pointer;">
+          <input type="checkbox" ${r.present ? 'checked' : ''} onchange="toggleManual(${sid}, this.checked)"/>
+          <span style="font-size:0.72rem;color:var(--text-muted)">P</span>
+        </label>
+      </div>`).join("");
+    document.getElementById("confirmBtn").disabled = false;
+    updateStats();
+  }
+
+  function updateStats() {
+    const entries = Object.values(draftRecords);
+    const total   = entries.length;
+    const present = entries.filter(r => r.present).length;
+    const absent  = total - present;
+    document.getElementById("statTotal").textContent   = total;
+    document.getElementById("statPresent").textContent = present;
+    document.getElementById("statAbsent").textContent  = absent;
+    document.getElementById("statRate").textContent    = total ? Math.round(present/total*100) + "%" : "—";
+  }
+
+  function toggleManual(studentId, present) {
+    if (draftRecords[studentId]) {
+      draftRecords[studentId].present    = present;
+      draftRecords[studentId].confidence = present ? draftRecords[studentId].confidence : 0;
+    }
+    renderDraft();
+  }
+
+  // ── Camera ────────────────────────────────────────────────────
+  async function startCamera() {
+    try {
+      // Try requested facing mode, fall back to any camera
+      const constraints = {
+        video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      };
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (_) {
+        // Browser may not support facingMode — fall back to any camera
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      }
+
+      const video = document.getElementById("cameraFeed");
+      video.srcObject = stream;
+      document.getElementById("startBtn").classList.add("hidden");
+      document.getElementById("flipBtn").classList.remove("hidden");
+      document.getElementById("startScanBtn").classList.remove("hidden");
+      document.getElementById("stopBtn").classList.remove("hidden");
+      setCamStatus("live", "Camera ready");
+      showToast("Camera started. Click 'Start Scan' to detect faces.", "info");
+    } catch (err) {
+      showToast("Camera error: " + err.message, "error");
+    }
+  }
+
+  async function flipCamera() {
+    // Toggle facing mode
+    facingMode = facingMode === "environment" ? "user" : "environment";
+    const wasScanning = scanning;
+
+    // Stop current stream
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    clearInterval(scanInterval);
+    scanning = false;
+    setCamStatus("", "Switching camera…");
+
+    await startCamera();
+
+    // Resume scan if it was running
+    if (wasScanning) {
+      setTimeout(() => toggleScan(), 400);
+    }
+    showToast(`Switched to ${facingMode === "environment" ? "back" : "front"} camera`, "info");
+  }
+
+  function toggleScan() {
+    if (!stream) return;
+    if (scanning) {
+      // Stop scanning
+      clearInterval(scanInterval);
+      scanning = false;
+      document.getElementById("startScanBtn").innerHTML = '<i data-lucide="scan-face"></i> Start Scan';
+      if (window.lucide) lucide.createIcons();
+      setCamStatus("live", "Camera ready");
+      showToast("Scan paused. Manually adjust checkboxes if needed.", "info");
+    } else {
+      // Start scanning
+      scanning = true;
+      document.getElementById("startScanBtn").innerHTML = '<i data-lucide="pause"></i> Pause Scan';
+      if (window.lucide) lucide.createIcons();
+      setCamStatus("scanning", "Scanning…");
+      captureAndScan(); // Run immediately
+      scanInterval = setInterval(captureAndScan, 2500);
+    }
+  }
+
+  async function captureAndScan() {
+    const video  = document.getElementById("cameraFeed");
+    const canvas = document.getElementById("cameraCanvas");
+    if (!video.videoWidth) return;
+
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    // Mirror horizontally only for front camera display
+    if (facingMode === "user") {
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, -canvas.width, 0);
+      ctx.restore();
+    } else {
+      ctx.drawImage(video, 0, 0);
+    }
+    const frame = canvas.toDataURL("image/jpeg", 0.85);
+
+    // Clear previous overlays
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (facingMode === "user") {
+      ctx.save(); ctx.scale(-1, 1); ctx.drawImage(video, -canvas.width, 0); ctx.restore();
+    } else {
+      ctx.drawImage(video, 0, 0);
+    }
+
+    try {
+      const res = await api.post("/face/scan", { frame, course_id: courseId });
+      let matchedNames = [];
+
+      res.matches.forEach(m => {
+        let [x1, y1, x2, y2] = m.bbox;
+        // Mirror bbox x-coords for front camera
+        if (facingMode === "user") {
+          const tmp = canvas.width - x2;
+          x2 = canvas.width - x1;
+          x1 = tmp;
+        }
+        const matched = m.student_id !== null;
+
+        // Draw bounding box
+        ctx.strokeStyle = matched ? "#0F9B58" : "#ff4d6d";
+        ctx.lineWidth   = 3;
+        ctx.shadowColor = matched ? "#0F9B58" : "#ff4d6d";
+        ctx.shadowBlur  = 8;
+        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+        ctx.shadowBlur = 0;
+
+        // Draw label background
+        const label    = matched ? m.name : "Unknown";
+        ctx.font       = "bold 14px Inter, sans-serif";
+        const tw       = ctx.measureText(label).width;
+        const lx       = Math.max(x1, 2);
+        const ly       = Math.max(y1 - 22, 2);
+        ctx.fillStyle  = matched ? "rgba(15,155,88,0.85)" : "rgba(255,77,109,0.85)";
+        ctx.fillRect(lx, ly, tw + 10, 20);
+        ctx.fillStyle  = "#fff";
+        ctx.fillText(label, lx + 5, ly + 14);
+
+        // Draw confidence
+        if (matched && m.confidence) {
+          ctx.fillStyle = "rgba(0,0,0,0.6)";
+          ctx.font = "11px Inter";
+          ctx.fillText((m.confidence * 100).toFixed(0) + "%", x1 + 4, y2 - 4);
+        }
+
+        if (matched && draftRecords[m.student_id]) {
+          draftRecords[m.student_id].present    = true;
+          draftRecords[m.student_id].confidence = m.confidence;
+          matchedNames.push(m.name);
+        }
+      });
+
+      renderDraft();
+
+      // Show match badge
+      const badge = document.getElementById("matchBadge");
+      if (matchedNames.length) {
+        badge.textContent = "✓ " + matchedNames.join(", ");
+        badge.style.display = "block";
+        setTimeout(() => { badge.style.display = "none"; }, 2000);
+      }
+
+    } catch (err) {
+      console.warn("Scan error:", err.message);
+    }
+  }
+
+  function stopCamera() {
+    clearInterval(scanInterval);
+    scanning = false;
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+    const canvas = document.getElementById("cameraCanvas");
+    canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);
+    document.getElementById("startBtn").classList.remove("hidden");
+    document.getElementById("flipBtn").classList.add("hidden");
+    document.getElementById("startScanBtn").classList.add("hidden");
+    document.getElementById("stopBtn").classList.add("hidden");
+    document.getElementById("startScanBtn").innerHTML = '<i data-lucide="scan-face"></i> Start Scan';
+    if (window.lucide) lucide.createIcons();
+    setCamStatus("", "Camera off");
+    showToast("Camera stopped. Review draft and confirm.", "info");
+  }
+
+  function setCamStatus(mode, text) {
+    const el = document.getElementById("camStatus");
+    el.className  = "cam-status " + mode;
+    document.getElementById("camStatusText").textContent = text;
+  }
+
+  function resetDraft() {
+    if (!courseData) return;
+    courseData.students.forEach(s => {
+      draftRecords[s.id] = { username: s.username, student_id_str: s.student_id, present: false, confidence: 0 };
+    });
+    renderDraft();
+    showToast("Draft reset.", "info");
+  }
+
+  async function confirmAttendance() {
+    const presentIds = Object.entries(draftRecords)
+      .filter(([_, r]) => r.present)
+      .map(([sid]) => parseInt(sid));
+    if (!presentIds.length) { showToast("No students marked present", "error"); return; }
+    try {
+      await api.post(`/teacher/courses/${courseId}/attendance`, {
+        date:        new Date().toISOString().split("T")[0],
+        present_ids: presentIds,
+      });
+      showToast(`Attendance saved! ${presentIds.length} student(s) present.`, "success");
+      loadCourse();
+    } catch (err) {
+      showToast("Save failed: " + err.message, "error");
+    }
+  }
+
+  function switchTab(tab) {
+    ["camera","history","students"].forEach(t => {
+      document.getElementById(`panel-${t}`).classList.toggle("hidden", t !== tab);
+      document.getElementById(`tab-${t}`).classList.toggle("btn-primary", t === tab);
+      document.getElementById(`tab-${t}`).classList.toggle("btn-outline", t !== tab);
+    });
+    if (tab !== "camera" && scanning) stopCamera();
+  }
+
+  loadCourse();
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.lucide) lucide.createIcons();
+  });
+</script>
+</body>
+</html>
