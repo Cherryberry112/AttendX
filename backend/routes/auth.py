@@ -82,13 +82,6 @@ def login():
     identity = {"id": user.id, "type": user.type, "username": user.username}
     token = create_access_token(identity=identity)
 
-    # Send welcome login email asynchronously (non-blocking)
-    try:
-        from utils.notifications import send_welcome_email
-        send_welcome_email(user.username, user.email, user.type)
-    except Exception as e:
-        print(f"[EMAIL] Welcome email skipped: {e}")
-
     return jsonify({
         "token": token,
         "type": user.type,

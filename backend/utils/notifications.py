@@ -119,7 +119,6 @@ def _wrap(content: str, preview: str = "") -> str:
 def send_registration_email(username: str, email: str, role: str):
     """Send a welcome email when a new account is registered."""
     role_label = role.capitalize()
-    role_icon  = {"student": "🎓", "teacher": "📚", "admin": "🛡️"}.get(role, "👋")
     role_tip   = {
         "student": "As a student, your first step should be to enroll your face from the dashboard so you can be recognized in class.",
         "teacher": "As a teacher, you can start tracking attendance right away from your courses panel.",
@@ -127,7 +126,7 @@ def send_registration_email(username: str, email: str, role: str):
     }.get(role, "We're glad to have you on board.")
 
     content = f"""
-    <h2>{role_icon} Welcome to AttendX, {username}!</h2>
+    <h2>Welcome to AttendX, {username}!</h2>
     <p class="sub">Your account has been successfully created</p>
 
     <p>Thank you for joining <strong>AttendX</strong> — the smart face-recognition attendance platform. Your account is now active and ready to use!</p>
@@ -142,50 +141,14 @@ def send_registration_email(username: str, email: str, role: str):
     <hr class="divider"/>
 
     <p style="font-size:0.82rem;color:{_MUTED};">
-      🚀 <strong>Next steps:</strong> Head over to your <a href="https://cherryberry112.github.io/AttendX/">Dashboard</a> and sign in with your email and password to get started.
+      <strong>Next steps:</strong> Head over to your <a href="https://cherryberry112.github.io/AttendX/">Dashboard</a> and sign in with your email and password to get started.
     </p>
     """
 
     html = _wrap(content, preview=f"Welcome to AttendX, {username}! Your account is ready.")
-    _send_async(email, f"🎉 Welcome to AttendX, {username}!", html)
+    _send_async(email, f"Welcome to AttendX, {username}!", html)
 
 
-# ── Welcome email ─────────────────────────────────────────────────────────────
-
-def send_welcome_email(username: str, email: str, role: str):
-    """Send a warm welcome email after a successful login."""
-    role_label = role.capitalize()
-    role_icon  = {"student": "🎓", "teacher": "📚", "admin": "🛡️"}.get(role, "👋")
-    role_tip   = {
-        "student": "You can enroll your face for automatic attendance, view your enrolled courses, and track your attendance rate — all from your dashboard.",
-        "teacher": "You can take live attendance using face recognition, view session history for each course, and track student participation.",
-        "admin":   "You have full access to manage users, courses, and attendance records across the entire system.",
-    }.get(role, "Explore your dashboard to get started.")
-
-    time_now = datetime.now().strftime("%B %d, %Y at %I:%M %p")
-
-    content = f"""
-    <h2>{role_icon} Welcome back, {username}!</h2>
-    <p class="sub">You signed in successfully at {time_now}</p>
-
-    <p>We're glad to see you again at <strong>AttendX</strong> — your smart face-recognition attendance platform. Your account is active and everything is ready for you.</p>
-
-    <hr class="divider"/>
-
-    <p style="font-size:0.82rem;color:{_MUTED};margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Your Role</p>
-    <p><span class="badge">{role_label}</span></p>
-
-    <p style="margin-top:20px;">{role_tip}</p>
-
-    <hr class="divider"/>
-
-    <p style="font-size:0.82rem;color:{_MUTED};">
-      🔒 <strong>Security tip:</strong> If you did not sign in just now, please change your password immediately by contacting your system administrator.
-    </p>
-    """
-
-    html = _wrap(content, preview=f"Welcome back, {username}! You signed in to AttendX.")
-    _send_async(email, f"✅ Welcome back to AttendX, {username}!", html)
 
 
 # ── Attendance confirmation email ─────────────────────────────────────────────
@@ -211,7 +174,7 @@ def notify_students_attendance(student_ids: list, course_name: str, att_date: st
 def _send_attendance_email(username: str, email: str, course_name: str,
                             date_fmt: str, teacher_name: str):
     content = f"""
-    <h2>🎉 Attendance Confirmed!</h2>
+    <h2>Attendance Confirmed!</h2>
     <p class="sub">{course_name} — {date_fmt}</p>
 
     <p>Hi <strong>{username}</strong>,</p>
@@ -251,4 +214,4 @@ def _send_attendance_email(username: str, email: str, course_name: str,
     """
 
     html = _wrap(content, preview=f"Your attendance for {course_name} on {date_fmt} has been confirmed!")
-    _send_async(email, f"✅ Attendance Recorded — {course_name}", html)
+    _send_async(email, f"Attendance Recorded — {course_name}", html)
