@@ -136,11 +136,11 @@ def record_attendance(course_id):
 
     db.session.commit()
 
-    # Notify students (placeholder)
+    # Send attendance confirmation emails to present students (async, non-blocking)
     try:
         from utils.notifications import notify_students_attendance
-        notify_students_attendance(present_ids, course.name, att_date)
-    except Exception:
-        pass  # Don't fail attendance if notification fails
+        notify_students_attendance(present_ids, course.name, att_date, teacher.username)
+    except Exception as e:
+        print(f"[EMAIL] Attendance notification skipped: {e}")
 
     return jsonify({"message": f"Attendance recorded: {recorded} students", "recorded": recorded}), 201

@@ -512,12 +512,10 @@ function renderSidebar(role, activePage) {
   const navs = {
     teacher: [
       { icon: "layout-dashboard", label: "Dashboard",   href: "dashboard.html" },
-      { icon: "book-open",        label: "My Courses",  href: "dashboard.html" },
       { icon: "user",             label: "Profile",     href: "profile.html" },
     ],
     student: [
       { icon: "layout-dashboard", label: "Dashboard",   href: "dashboard.html" },
-      { icon: "book-open",        label: "My Courses",  href: "dashboard.html" },
       { icon: "smile",            label: "Face Enroll", href: "enroll.html" },
       { icon: "user",             label: "Profile",     href: "profile.html" },
     ],
