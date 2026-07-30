@@ -26,6 +26,9 @@
       </div>
 
       <!-- Camera box -->
+      <div id="lightingWarning" class="hidden" style="background:rgba(255,193,7,0.15); color:#ffc107; border:1px solid #ffc107; padding:0.6rem 1rem; border-radius:8px; margin-bottom:1rem; text-align:center; font-weight:600;">
+        ⚠️ Room is too dark. Please move to a brighter area for clear face recognition.
+      </div>
       <div class="card" style="padding:0; overflow:hidden; margin-bottom:1.5rem;">
         <div class="enroll-camera-box" id="enrollCameraBox">
           <video id="enrollVideo" autoplay playsinline muted></video>
@@ -102,6 +105,31 @@
     }
   }
 
+  let lightCheckInterval = null;
+  function startLightingCheck() {
+    if (lightCheckInterval) clearInterval(lightCheckInterval);
+    lightCheckInterval = setInterval(() => {
+      const video = document.getElementById("enrollVideo");
+      if (!video || video.paused || video.ended || !video.videoWidth) return;
+      const c = document.createElement("canvas");
+      c.width = 64; c.height = 64;
+      const ctx = c.getContext("2d");
+      ctx.drawImage(video, 0, 0, 64, 64);
+      const data = ctx.getImageData(0, 0, 64, 64).data;
+      let total = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        total += (0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]);
+      }
+      const avgBrightness = total / (data.length / 4);
+      const warnBox = document.getElementById("lightingWarning");
+      if (avgBrightness < 40) {
+        warnBox?.classList.remove("hidden");
+      } else {
+        warnBox?.classList.add("hidden");
+      }
+    }, 500);
+  }
+
   async function startEnrollment() {
     try {
       stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
@@ -110,6 +138,7 @@
       captures     = [];
       currentStep  = 0;
       updateStepUI(0);
+      startLightingCheck();
       captureStep();
     } catch (err) {
       showToast("Cannot access camera: " + err.message, "error");
@@ -118,6 +147,7 @@
 
   function captureStep() {
     if (currentStep >= STEPS.length) {
+      if (lightCheckInterval) clearInterval(lightCheckInterval);
       submitEnrollment();
       return;
     }
@@ -125,14 +155,27 @@
     const oval = document.getElementById("faceOval");
     oval.className = "face-oval detecting";
 
-    // Give user 2s to position, then capture
+    // Give user 2.5s to position, then capture
     setTimeout(() => {
       oval.className = "face-oval detected";
       const video  = document.getElementById("enrollVideo");
       const canvas = document.createElement("canvas");
       canvas.width  = video.videoWidth;
       canvas.height = video.videoHeight;
-      canvas.getContext("2d").drawImage(video, 0, 0);
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0);
+
+      // Check brightness of captured frame
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let total = 0;
+      for (let i = 0; i < data.length; i += 16) {
+        total += (0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]);
+      }
+      const avgBrightness = total / (data.length / 16);
+      if (avgBrightness < 30) {
+        showToast("Frame too dark! Please move to better lighting.", "error", 2500);
+      }
+
       const frame = canvas.toDataURL("image/jpeg", 0.85);
       captures.push(frame);
 
@@ -145,6 +188,7 @@
         if (currentStep < STEPS.length) {
           captureStep();
         } else {
+          if (lightCheckInterval) clearInterval(lightCheckInterval);
           submitEnrollment();
         }
       }, 800);
