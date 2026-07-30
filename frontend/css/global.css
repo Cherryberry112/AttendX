@@ -670,3 +670,83 @@ svg[data-lucide],
   width: 14px;
   height: 14px;
 }
+
+/* ── Mobile Phone Shape-Shifting & Responsive Layouts ────────── */
+@media (max-width: 768px) {
+  .app-layout {
+    display: block;
+    position: relative;
+    overflow-x: hidden;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 260px;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .main-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    padding: 1rem !important;
+  }
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .grid-4, .grid-3, .grid-2 {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem;
+  }
+  .card {
+    padding: 1rem !important;
+  }
+  .table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+  table {
+    width: 100%;
+    min-width: 500px;
+  }
+  .modal-box {
+    width: 94% !important;
+    max-width: 94% !important;
+    padding: 1.25rem !important;
+    max-height: 88vh;
+    overflow-y: auto;
+  }
+  .btn-group, .action-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+  .btn-group .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  h1 { font-size: 1.5rem !important; }
+  h2 { font-size: 1.25rem !important; }
+  .stat-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  .top-header {
+    padding: 0.5rem 1rem;
+  }
+  .enroll-container, .scan-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+  }
+}
+

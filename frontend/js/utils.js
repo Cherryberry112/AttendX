@@ -374,8 +374,26 @@ const handleMockRequest = async (method, path, body) => {
   throw new Error("API Route " + method + " " + path + " not found in mock db");
 };
 
-/* ── API Fetch Wrapper ───────────────────────────────────────── */
+/* ── API Fetch Wrapper with Intelligent Caching ──────────────── */
+const _apiCache = new Map();
+
+function _getCacheKey(path) {
+  const token = Auth.getToken() || "anon";
+  return `ax_cache_${token.slice(0, 8)}_${path}`;
+}
+
 const api = {
+  clearCache: () => {
+    _apiCache.clear();
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("ax_cache_")) {
+          localStorage.removeItem(key);
+        }
+      }
+    } catch (e) {}
+  },
   _req: async (method, path, body = null) => {
     if (USE_MOCK) return handleMockRequest(method, path, body);
     const token = Auth.getToken();
@@ -405,11 +423,60 @@ const api = {
     }
     return data;
   },
-  get:    (path)       => api._req("GET",    path),
-  post:   (path, body) => api._req("POST",   path, body),
-  put:    (path, body) => api._req("PUT",    path, body),
-  delete: (path)       => api._req("DELETE", path),
-};
+  get: async (path, options = {}) => {
+    if (options.forceReload) {
+      const data = await api._req("GET", path);
+      const key = _getCacheKey(path);
+      const entry = { timestamp: Date.now(), data };
+      _apiCache.set(key, entry);
+      try { localStorage.setItem(key, JSON.stringify(entry)); } catch (e) {}
+      return data;
+    }
+
+    const key = _getCacheKey(path);
+    const now = Date.now();
+    let entry = _apiCache.get(key);
+    if (!entry) {
+      try {
+        const stored = localStorage.getItem(key);
+        if (stored) entry = JSON.parse(stored);
+      } catch (e) {}
+    }
+
+    // 180 seconds TTL (3 minutes)
+    if (entry && (now - entry.timestamp) < 180000) {
+      // Stale-while-revalidate: if older than 30 seconds, update in background
+      if ((now - entry.timestamp) > 30000) {
+        api._req("GET", path).then(freshData => {
+          const newEntry = { timestamp: Date.now(), data: freshData };
+          _apiCache.set(key, newEntry);
+          try { localStorage.setItem(key, JSON.stringify(newEntry)); } catch (e) {}
+        }).catch(() => {});
+      }
+      return entry.data;
+    }
+
+    const data = await api._req("GET", path);
+    const newEntry = { timestamp: now, data };
+    _apiCache.set(key, newEntry);
+    try { localStorage.setItem(key, JSON.stringify(newEntry)); } catch (e) {}
+    return data;
+  },
+  post: async (path, body) => {
+    const res = await api._req("POST", path, body);
+    api.clearCache();
+    return res;
+  },
+  put: async (path, body) => {
+    const res = await api._req("PUT", path, body);
+    api.clearCache();
+    return res;
+  },
+  delete: async (path) => {
+    const res = await api._req("DELETE", path);
+    api.clearCache();
+    return res;
+  },
 
 /* ── Toast Notifications ─────────────────────────────────────── */
 function ensureToastContainer() {

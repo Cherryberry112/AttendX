@@ -30,20 +30,17 @@ def enroll():
 
     try:
         from ml.face_detector import detect_and_embed
-    except ImportError:
-        # ML module not available — store a placeholder
-        student.face_embedding = json.dumps([0.0] * 512)
-        db.session.commit()
-        return jsonify({"message": "Face enrolled successfully (ML module unavailable — placeholder saved)"}), 200
+    except ImportError as e:
+        return jsonify({"error": f"ML module import failure: {e}"}), 500
 
     embeddings = []
-    for frame_b64 in frames:
+    for idx, frame_b64 in enumerate(frames):
         if "," in frame_b64:
             frame_b64 = frame_b64.split(",", 1)[1]
         img_bytes = base64.b64decode(frame_b64)
         embedding = detect_and_embed(img_bytes)
         if embedding is None:
-            return jsonify({"error": "Face not detected in one or more frames. Please retry."}), 422
+            return jsonify({"error": f"Face not detected clearly or room too dark in step {idx+1}. Please retry in a brighter room."}), 422
         embeddings.append(embedding)
 
     master = np.mean(embeddings, axis=0)
@@ -51,7 +48,8 @@ def enroll():
 
     student.face_embedding = json.dumps(master.tolist())
     db.session.commit()
-    return jsonify({"message": "Face enrolled successfully"}), 200
+    print(f"[SUCCESS] Saved 512-dim face embedding for student {student.username} (id={student.id}) into Supabase DB.")
+    return jsonify({"message": "Face enrolled and vector embedding saved successfully to database"}), 200
 
 
 # ── Live Scan ─────────────────────────────────────────────────────────────────

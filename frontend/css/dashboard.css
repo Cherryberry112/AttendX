@@ -359,3 +359,23 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(168,85,247,0.25); border-radius: var(--radius-pill); }
 ::-webkit-scrollbar-thumb:hover { background: rgba(168,85,247,0.45); }
+
+/* ── Mobile Responsive Dashboard ────────────────────────────── */
+@media (max-width: 768px) {
+  .profile-header {
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    gap: 1rem;
+  }
+  .enroll-camera-box, .scan-camera-box {
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 260px;
+  }
+  .face-oval {
+    width: 130px !important;
+    height: 160px !important;
+  }
+}
+
