@@ -16,23 +16,22 @@ import cv2
 import numpy as np
 
 # ── InsightFace (disabled on free-tier / Render by default) ──────────────────
-INSIGHTFACE_AVAILABLE = False
+# Only enabled if ENABLE_INSIGHTFACE=1 env var is set AND package is installed.
 _app = None
 
-if os.environ.get("ENABLE_INSIGHTFACE", "0") == "1":
-    try:
-        import insightface
-        from insightface.app import FaceAnalysis
-        INSIGHTFACE_AVAILABLE = True
-    except ImportError:
-        pass
+def _insightface_enabled() -> bool:
+    return os.environ.get("ENABLE_INSIGHTFACE", "0") == "1"
+
+INSIGHTFACE_AVAILABLE: bool = _insightface_enabled()
 
 def _get_insightface_app():
+    """Load InsightFace app lazily. Returns None if not enabled or not installed."""
     global _app
-    if not INSIGHTFACE_AVAILABLE:
+    if not _insightface_enabled():
         return None
     if _app is None:
         try:
+            from insightface.app import FaceAnalysis  # imported here to avoid NameError at module level
             _app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
             _app.prepare(ctx_id=0, det_size=(640, 640))
         except Exception as e:
