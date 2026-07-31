@@ -11,7 +11,6 @@ from email.mime.text import MIMEText
 from datetime import datetime
 
 SMTP_HOST = "smtp.gmail.com"
-SMTP_PORT = 587
 
 _BRAND_COLOR = "#6C63FF"
 _BG          = "#0D0D1A"
@@ -29,44 +28,64 @@ def is_valid_email(email: str) -> bool:
 
 # ── Low-level sender ──────────────────────────────────────────────────────────
 
-def _send(to_email: str, subject: str, html: str) -> bool:
-    """Send one HTML email. Reads credentials at call-time so Render env vars work."""
-    # Read credentials inside function — guaranteed to see Render env vars
+def _send(to_email: str, subject: str, html: str) -> tuple:
+    """Send one HTML email. Returns (success:bool, error_msg:str).
+    Tries port 465 (SSL) first, falls back to port 587 (STARTTLS).
+    Credentials are read at call-time so Render env vars are always picked up.
+    """
     sender   = os.environ.get("MAIL_SENDER", "").strip()
     password = os.environ.get("MAIL_APP_PASSWORD", "").replace(" ", "").strip()
 
     if not sender or not password:
-        print(f"[EMAIL] MAIL_SENDER or MAIL_APP_PASSWORD not set — skipping email to {to_email}")
-        return False
+        msg = f"MAIL_SENDER or MAIL_APP_PASSWORD not set (sender={sender!r})"
+        print(f"[EMAIL] {msg}")
+        return False, msg
 
     if not is_valid_email(to_email):
-        print(f"[EMAIL] Skipping invalid recipient address: {to_email}")
-        return False
+        msg = f"Invalid recipient address: {to_email}"
+        print(f"[EMAIL] {msg}")
+        return False, msg
 
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = f"AttendX <{sender}>"
-        msg["To"]      = to_email
-        msg.attach(MIMEText(html, "html", "utf-8"))
+    email_msg = MIMEMultipart("alternative")
+    email_msg["Subject"] = subject
+    email_msg["From"]    = f"AttendX <{sender}>"
+    email_msg["To"]      = to_email
+    email_msg.attach(MIMEText(html, "html", "utf-8"))
+    raw = email_msg.as_string()
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(sender, password)
-            server.sendmail(sender, [to_email], msg.as_string())
+    # Try port 465 (SSL) first — less likely to be blocked on cloud hosts
+    last_error = ""
+    for method, port in [("ssl", 465), ("starttls", 587)]:
+        try:
+            if method == "ssl":
+                import ssl as _ssl
+                ctx = _ssl.create_default_context()
+                with smtplib.SMTP_SSL(SMTP_HOST, port, context=ctx, timeout=15) as server:
+                    server.login(sender, password)
+                    server.sendmail(sender, [to_email], raw)
+            else:
+                with smtplib.SMTP(SMTP_HOST, port, timeout=15) as server:
+                    server.ehlo()
+                    server.starttls()
+                    server.ehlo()
+                    server.login(sender, password)
+                    server.sendmail(sender, [to_email], raw)
+            print(f"[EMAIL] Sent via port {port}: '{subject}' -> {to_email}")
+            return True, ""
+        except Exception as exc:
+            last_error = f"port {port} ({method}): {exc}"
+            print(f"[EMAIL] Failed {last_error}")
 
-        print(f"[EMAIL] Sent '{subject}' to {to_email}")
-        return True
-    except Exception as exc:
-        print(f"[EMAIL] Failed sending to {to_email}: {exc}")
-        return False
+    return False, last_error
 
 
 def _send_async(to_email: str, subject: str, html: str):
     """Fire-and-forget — runs in a daemon thread so routes never block."""
-    t = threading.Thread(target=_send, args=(to_email, subject, html), daemon=True)
+    def _run():
+        ok, err = _send(to_email, subject, html)
+        if not ok:
+            print(f"[EMAIL] Async send failed: {err}")
+    t = threading.Thread(target=_run, daemon=True)
     t.start()
 
 

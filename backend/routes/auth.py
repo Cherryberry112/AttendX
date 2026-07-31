@@ -128,10 +128,8 @@ def me():
 
 @auth_bp.get("/test-email")
 def test_email():
-    """Debug route — sends a test email synchronously and reports result.
-    Usage: GET /api/auth/test-email?to=your@email.com
-    """
-    import os, smtplib
+    """Debug: GET /api/auth/test-email?to=your@email.com — shows exact error on failure."""
+    import os
     to = request.args.get("to", "").strip()
     if not to:
         return jsonify({"error": "Pass ?to=your@email.com"}), 400
@@ -141,18 +139,19 @@ def test_email():
 
     if not sender or not password:
         return jsonify({
-            "error": "MAIL_SENDER or MAIL_APP_PASSWORD not found in env",
+            "error": "Credentials missing in environment",
             "MAIL_SENDER":       sender or "(empty)",
-            "MAIL_APP_PASSWORD": "(empty)" if not password else "(set)",
+            "MAIL_APP_PASSWORD": "(set)" if password else "(empty)",
         }), 500
 
-    try:
-        from utils.notifications import send_registration_email
-        from utils.notifications import _send
-        ok = _send(to, "AttendX Email Test", "<h2>It works!</h2><p>Email is configured correctly.</p>")
-        if ok:
-            return jsonify({"status": "sent", "to": to, "from": sender}), 200
-        else:
-            return jsonify({"status": "failed — check server logs"}), 500
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+    from utils.notifications import _send
+    ok, err = _send(to, "AttendX Email Test", "<h2>It works!</h2><p>Email configured correctly.</p>")
+    if ok:
+        return jsonify({"status": "sent", "to": to, "from": sender}), 200
+    else:
+        return jsonify({
+            "status": "failed",
+            "error":  err,
+            "MAIL_SENDER": sender,
+        }), 500
+
