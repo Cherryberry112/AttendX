@@ -1,7 +1,11 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from backend dir first, then fall back to repo root
+_here = Path(__file__).parent          # …/backend/
+load_dotenv(_here / ".env")            # …/backend/.env  (Render / explicit)
+load_dotenv(_here.parent / ".env")     # …/.env          (local root)
 
 class Config:
     DATABASE_URL = os.getenv("DATABASE_URL")

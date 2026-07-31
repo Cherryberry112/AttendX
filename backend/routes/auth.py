@@ -124,3 +124,35 @@ def me():
         "student_id":       user.student_id,
         "guardian_number":  user.guardian_number,
     }), 200
+
+
+@auth_bp.get("/test-email")
+def test_email():
+    """Debug route — sends a test email synchronously and reports result.
+    Usage: GET /api/auth/test-email?to=your@email.com
+    """
+    import os, smtplib
+    to = request.args.get("to", "").strip()
+    if not to:
+        return jsonify({"error": "Pass ?to=your@email.com"}), 400
+
+    sender   = os.environ.get("MAIL_SENDER", "")
+    password = os.environ.get("MAIL_APP_PASSWORD", "").replace(" ", "")
+
+    if not sender or not password:
+        return jsonify({
+            "error": "MAIL_SENDER or MAIL_APP_PASSWORD not found in env",
+            "MAIL_SENDER":       sender or "(empty)",
+            "MAIL_APP_PASSWORD": "(empty)" if not password else "(set)",
+        }), 500
+
+    try:
+        from utils.notifications import send_registration_email
+        from utils.notifications import _send
+        ok = _send(to, "AttendX Email Test", "<h2>It works!</h2><p>Email is configured correctly.</p>")
+        if ok:
+            return jsonify({"status": "sent", "to": to, "from": sender}), 200
+        else:
+            return jsonify({"status": "failed — check server logs"}), 500
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
