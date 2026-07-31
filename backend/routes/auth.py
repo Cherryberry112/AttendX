@@ -7,9 +7,10 @@ from models import User
 
 auth_bp = Blueprint("auth", __name__)
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 STUDENT_ID_REGEX = re.compile(r"^\d{4}-\d{1,2}-\d{2}-\d{3}$")
+EMAIL_REGEX      = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 
 def _hash(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -17,76 +18,93 @@ def _hash(password: str) -> str:
 def _check(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
-# ── Routes ───────────────────────────────────────────────────────────────────
+def _valid_email(email: str) -> bool:
+    return bool(email) and bool(EMAIL_REGEX.match(email.strip()))
+
+# ── Routes ────────────────────────────────────────────────────────────────────
 
 @auth_bp.post("/register")
 def register():
-    data = request.get_json()
-    required = ["username", "email", "password", "type"]
-    if not all(k in data for k in required):
-        return jsonify({"error": "Missing required fields"}), 400
+    data = request.get_json() or {}
 
-    user_type = data["type"].lower()
-    if user_type not in ("admin", "teacher", "student"):
-        return jsonify({"error": "Invalid user type"}), 400
+    # ── Mandatory fields ──
+    username = (data.get("username") or "").strip()
+    email    = (data.get("email")    or "").strip()
+    password = (data.get("password") or "")
+    user_type = (data.get("type")   or "").strip().lower()
 
-    # Duplicate email check
-    if User.query.filter_by(email=data["email"]).first():
+    if not username:
+        return jsonify({"error": "Full name is required"}), 400
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
+    if not _valid_email(email):
+        return jsonify({"error": "Please enter a valid email address"}), 400
+    if not password:
+        return jsonify({"error": "Password is required"}), 400
+    if len(password) < 8:
+        return jsonify({"error": "Password must be at least 8 characters"}), 400
+
+    # ── Role — only teacher or student allowed ──
+    if user_type not in ("teacher", "student"):
+        return jsonify({"error": "Registration is only available for teachers and students"}), 400
+
+    # ── Duplicate email check ──
+    if User.query.filter_by(email=email).first():
         return jsonify({"error": "Email already registered"}), 409
 
-    # Student-specific validations
-    student_id = None
+    # ── Student-specific validations (student_id mandatory, guardian optional) ──
+    student_id      = None
     guardian_number = None
     if user_type == "student":
-        student_id = data.get("student_id", "").strip()
+        student_id = (data.get("student_id") or "").strip()
         if not student_id:
             return jsonify({"error": "Student ID is required for students"}), 400
         if not STUDENT_ID_REGEX.match(student_id):
             return jsonify({"error": "Student ID must be in format YYYY-D-DD-DDD (e.g. 2022-3-60-110)"}), 400
         if User.query.filter_by(student_id=student_id).first():
             return jsonify({"error": "Student ID already exists"}), 409
-        guardian_number = data.get("guardian_number", "").strip() or None
+        guardian_number = (data.get("guardian_number") or "").strip() or None
 
+    # ── Create user ──
     user = User(
         type=user_type,
-        username=data["username"],
-        email=data["email"],
-        password=_hash(data["password"]),
-        phone=data.get("phone", "").strip() or None,
+        username=username,
+        email=email,
+        password=_hash(password),
+        phone=(data.get("phone") or "").strip() or None,
         student_id=student_id,
         guardian_number=guardian_number,
     )
     db.session.add(user)
     db.session.commit()
 
-    # Send registration email asynchronously (non-blocking)
+    # ── Send welcome email (non-blocking, only to valid addresses) ──
     try:
         from utils.notifications import send_registration_email
         send_registration_email(user.username, user.email, user.type)
-    except Exception as e:
-        print(f"[EMAIL] Registration email skipped: {e}")
+    except Exception as exc:
+        print(f"[EMAIL] Registration email error: {exc}")
 
-    return jsonify({"message": "User registered successfully", "id": user.id}), 201
+    return jsonify({"message": "Account created successfully", "id": user.id}), 201
 
 
 @auth_bp.post("/login")
 def login():
-    data = request.get_json()
-    if not data or not data.get("email") or not data.get("password"):
+    data = request.get_json() or {}
+    if not data.get("email") or not data.get("password"):
         return jsonify({"error": "Email and password required"}), 400
 
-    user = User.query.filter_by(email=data["email"]).first()
+    user = User.query.filter_by(email=data["email"].strip()).first()
     if not user or not _check(data["password"], user.password):
         return jsonify({"error": "Invalid credentials"}), 401
 
     identity = {"id": user.id, "type": user.type, "username": user.username}
     token = create_access_token(identity=identity)
-
     return jsonify({
-        "token": token,
-        "type": user.type,
+        "token":    token,
+        "type":     user.type,
         "username": user.username,
-        "id": user.id,
+        "id":       user.id,
     }), 200
 
 
@@ -98,11 +116,11 @@ def me():
     if not user:
         return jsonify({"error": "User not found"}), 404
     return jsonify({
-        "id": user.id,
-        "username": user.username,
-        "email": user.email,
-        "type": user.type,
-        "phone": user.phone,
-        "student_id": user.student_id,
-        "guardian_number": user.guardian_number,
+        "id":               user.id,
+        "username":         user.username,
+        "email":            user.email,
+        "type":             user.type,
+        "phone":            user.phone,
+        "student_id":       user.student_id,
+        "guardian_number":  user.guardian_number,
     }), 200

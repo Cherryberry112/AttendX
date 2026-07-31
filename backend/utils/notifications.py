@@ -3,54 +3,69 @@ AttendX — Email Notification Utilities
 Sends HTML-rich welcome and attendance emails via Gmail SMTP.
 """
 import os
+import re
 import smtplib
 import threading
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime
 
-# ── SMTP config from env ──────────────────────────────────────────────────────
-MAIL_SENDER       = os.environ.get("MAIL_SENDER", "")
-MAIL_APP_PASSWORD = os.environ.get("MAIL_APP_PASSWORD", "").replace(" ", "")
-SMTP_HOST         = "smtp.gmail.com"
-SMTP_PORT         = 587
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PORT = 587
 
-_BRAND_COLOR  = "#6C63FF"
-_GREEN        = "#0F9B58"
-_BG           = "#0D0D1A"
-_CARD_BG      = "#13131F"
-_TEXT         = "#E2E2F0"
-_MUTED        = "#8A8AA0"
+_BRAND_COLOR = "#6C63FF"
+_BG          = "#0D0D1A"
+_CARD_BG     = "#13131F"
+_TEXT        = "#E2E2F0"
+_MUTED       = "#8A8AA0"
+
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
+
+
+def is_valid_email(email: str) -> bool:
+    """Return True if the email looks like a real address."""
+    return bool(email) and bool(EMAIL_REGEX.match(email.strip()))
 
 
 # ── Low-level sender ──────────────────────────────────────────────────────────
 
 def _send(to_email: str, subject: str, html: str) -> bool:
-    """Send one HTML email. Returns True on success."""
-    if not MAIL_SENDER or not MAIL_APP_PASSWORD:
-        print(f"[EMAIL] No credentials set — skipping email to {to_email}")
+    """Send one HTML email. Reads credentials at call-time so Render env vars work."""
+    # Read credentials inside function — guaranteed to see Render env vars
+    sender   = os.environ.get("MAIL_SENDER", "").strip()
+    password = os.environ.get("MAIL_APP_PASSWORD", "").replace(" ", "").strip()
+
+    if not sender or not password:
+        print(f"[EMAIL] MAIL_SENDER or MAIL_APP_PASSWORD not set — skipping email to {to_email}")
         return False
+
+    if not is_valid_email(to_email):
+        print(f"[EMAIL] Skipping invalid recipient address: {to_email}")
+        return False
+
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"]    = f"AttendX Notifications <{MAIL_SENDER}>"
+        msg["From"]    = f"AttendX <{sender}>"
         msg["To"]      = to_email
         msg.attach(MIMEText(html, "html", "utf-8"))
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=10) as server:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=15) as server:
             server.ehlo()
             server.starttls()
-            server.login(MAIL_SENDER, MAIL_APP_PASSWORD)
-            server.sendmail(MAIL_SENDER, [to_email], msg.as_string())
-        print(f"[EMAIL] ✓ Sent '{subject}' → {to_email}")
+            server.ehlo()
+            server.login(sender, password)
+            server.sendmail(sender, [to_email], msg.as_string())
+
+        print(f"[EMAIL] Sent '{subject}' to {to_email}")
         return True
-    except Exception as e:
-        print(f"[EMAIL] ✗ Failed to send to {to_email}: {e}")
+    except Exception as exc:
+        print(f"[EMAIL] Failed sending to {to_email}: {exc}")
         return False
 
 
 def _send_async(to_email: str, subject: str, html: str):
-    """Fire-and-forget email in a background thread so routes don't block."""
+    """Fire-and-forget — runs in a daemon thread so routes never block."""
     t = threading.Thread(target=_send, args=(to_email, subject, html), daemon=True)
     t.start()
 
@@ -58,15 +73,18 @@ def _send_async(to_email: str, subject: str, html: str):
 # ── Shared HTML shell ─────────────────────────────────────────────────────────
 
 def _wrap(content: str, preview: str = "") -> str:
-    """Wrap content in the AttendX branded email shell."""
     year = datetime.now().year
+    preview_tag = (
+        f'<span style="display:none;font-size:0;max-height:0;overflow:hidden;">{preview}</span>'
+        if preview else ""
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <title>AttendX</title>
-  {'<span style="display:none;font-size:0;max-height:0;overflow:hidden;">' + preview + '</span>' if preview else ''}
+  {preview_tag}
   <style>
     body      {{ margin:0; padding:0; background:{_BG}; font-family:'Segoe UI',Arial,sans-serif; color:{_TEXT}; }}
     a         {{ color:{_BRAND_COLOR}; text-decoration:none; }}
@@ -74,31 +92,35 @@ def _wrap(content: str, preview: str = "") -> str:
                  border:1px solid rgba(108,99,255,0.18); overflow:hidden;
                  box-shadow:0 8px 40px rgba(0,0,0,0.5); }}
     .top-bar  {{ background:linear-gradient(135deg,#6C63FF 0%,#9B59B6 100%);
-                 padding:32px 40px 28px; text-align:center; }}
-    .logo     {{ display:inline-flex; align-items:center; gap:12px; }}
-    .logo-box {{ width:46px; height:46px; background:rgba(255,255,255,0.2);
-                 border-radius:10px; display:flex; align-items:center; justify-content:center;
-                 font-size:1.1rem; font-weight:900; color:#fff; letter-spacing:-1px; }}
-    .logo-txt {{ font-size:1.6rem; font-weight:800; color:#fff; letter-spacing:-0.5px; }}
-    .logo-txt span {{ color:rgba(255,255,255,0.7); }}
+                 padding:30px 40px 26px; text-align:center; }}
+    .logo-box {{ display:inline-flex; align-items:center; gap:12px; }}
+    .logo-icon{{ width:44px; height:44px; background:rgba(255,255,255,0.2); border-radius:10px;
+                 display:flex; align-items:center; justify-content:center;
+                 font-size:1rem; font-weight:900; color:#fff; letter-spacing:-1px; }}
+    .logo-txt {{ font-size:1.5rem; font-weight:800; color:#fff; letter-spacing:-0.5px; }}
+    .logo-txt span {{ color:rgba(255,255,255,0.65); }}
     .body     {{ padding:36px 40px; }}
-    .footer   {{ padding:20px 40px; text-align:center; background:rgba(0,0,0,0.2);
+    .footer   {{ padding:18px 40px; text-align:center; background:rgba(0,0,0,0.25);
                  border-top:1px solid rgba(255,255,255,0.05); }}
     .footer p {{ margin:0; font-size:0.72rem; color:{_MUTED}; line-height:1.8; }}
-    h2        {{ margin:0 0 6px; font-size:1.35rem; font-weight:800; color:#fff; }}
-    .sub      {{ font-size:0.85rem; color:{_MUTED}; margin:0 0 28px; }}
-    p         {{ font-size:0.9rem; line-height:1.7; color:{_TEXT}; margin:0 0 16px; }}
-    .divider  {{ border:none; border-top:1px solid rgba(255,255,255,0.07); margin:24px 0; }}
+    h2        {{ margin:0 0 6px; font-size:1.3rem; font-weight:800; color:#fff; }}
+    .sub      {{ font-size:0.84rem; color:{_MUTED}; margin:0 0 26px; }}
+    p         {{ font-size:0.88rem; line-height:1.7; color:{_TEXT}; margin:0 0 14px; }}
+    .divider  {{ border:none; border-top:1px solid rgba(255,255,255,0.07); margin:22px 0; }}
     .badge    {{ display:inline-block; background:rgba(108,99,255,0.15); color:{_BRAND_COLOR};
                  border:1px solid rgba(108,99,255,0.3); border-radius:6px;
-                 font-size:0.78rem; font-weight:700; padding:3px 10px; }}
+                 font-size:0.76rem; font-weight:700; padding:3px 10px; }}
+    .present  {{ background:rgba(15,155,88,0.15); color:#0F9B58;
+                 border:1px solid rgba(15,155,88,0.3); border-radius:6px;
+                 padding:3px 12px; font-size:0.82rem; font-weight:700; }}
+    table td  {{ vertical-align:middle; }}
   </style>
 </head>
 <body>
 <div class="shell">
   <div class="top-bar">
-    <div class="logo">
-      <div class="logo-box">AX</div>
+    <div class="logo-box">
+      <div class="logo-icon">AX</div>
       <div class="logo-txt">Attend<span>X</span></div>
     </div>
   </div>
@@ -106,8 +128,8 @@ def _wrap(content: str, preview: str = "") -> str:
     {content}
   </div>
   <div class="footer">
-    <p>© {year} AttendX — Smart Attendance System<br>
-    This is an automated message. Please do not reply to this email.</p>
+    <p>&copy; {year} AttendX &mdash; Smart Attendance System<br>
+    This is an automated message. Please do not reply.</p>
   </div>
 </div>
 </body>
@@ -117,31 +139,39 @@ def _wrap(content: str, preview: str = "") -> str:
 # ── Registration email ────────────────────────────────────────────────────────
 
 def send_registration_email(username: str, email: str, role: str):
-    """Send a welcome email when a new account is registered."""
+    """Send a welcome email when a brand-new account is created."""
+    if not is_valid_email(email):
+        print(f"[EMAIL] Registration email skipped — invalid address: {email}")
+        return
+
     role_label = role.capitalize()
-    role_tip   = {
-        "student": "As a student, your first step should be to enroll your face from the dashboard so you can be recognized in class.",
-        "teacher": "As a teacher, you can start tracking attendance right away from your courses panel.",
-        "admin":   "As an admin, you can begin managing the system users and courses.",
-    }.get(role, "We're glad to have you on board.")
+    role_tip = {
+        "student": "Your first step is to enroll your face from the student dashboard so you can be recognized automatically in class.",
+        "teacher": "You can begin taking live attendance for your courses right away from the teacher dashboard.",
+        "admin":   "You have full access to manage users, courses, and attendance records across the system.",
+    }.get(role, "We are glad to have you on board.")
 
     content = f"""
     <h2>Welcome to AttendX, {username}!</h2>
     <p class="sub">Your account has been successfully created</p>
 
-    <p>Thank you for joining <strong>AttendX</strong> — the smart face-recognition attendance platform. Your account is now active and ready to use!</p>
+    <p>Thank you for joining <strong>AttendX</strong> &mdash; the smart face-recognition attendance platform.
+    Your account is now active and ready to use.</p>
 
     <hr class="divider"/>
 
-    <p style="font-size:0.82rem;color:{_MUTED};margin-bottom:8px;text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Your Role</p>
+    <p style="font-size:0.78rem;color:{_MUTED};margin-bottom:6px;text-transform:uppercase;
+              letter-spacing:0.08em;font-weight:700;">Your Role</p>
     <p><span class="badge">{role_label}</span></p>
 
-    <p style="margin-top:20px;">{role_tip}</p>
+    <p style="margin-top:18px;">{role_tip}</p>
 
     <hr class="divider"/>
 
     <p style="font-size:0.82rem;color:{_MUTED};">
-      <strong>Next steps:</strong> Head over to your <a href="https://cherryberry112.github.io/AttendX/">Dashboard</a> and sign in with your email and password to get started.
+      <strong>Next steps:</strong> Head over to your
+      <a href="https://cherryberry112.github.io/AttendX/">AttendX Dashboard</a>
+      and sign in with your email and password to get started.
     </p>
     """
 
@@ -149,69 +179,70 @@ def send_registration_email(username: str, email: str, role: str):
     _send_async(email, f"Welcome to AttendX, {username}!", html)
 
 
-
-
 # ── Attendance confirmation email ─────────────────────────────────────────────
 
 def notify_students_attendance(student_ids: list, course_name: str, att_date: str,
                                 teacher_name: str = "Your teacher"):
-    """Send attendance confirmation emails to all present students."""
+    """Send attendance confirmation emails to all present students with valid emails."""
     from models import User
 
     try:
-        date_fmt = datetime.strptime(att_date, "%Y-%m-%d").strftime("%A, %B %d %Y")
+        date_fmt = datetime.strptime(att_date, "%Y-%m-%d").strftime("%A, %B %d, %Y")
     except Exception:
         date_fmt = att_date
 
     students = User.query.filter(User.id.in_(student_ids), User.type == "student").all()
-
+    sent = 0
     for student in students:
-        if not student.email:
+        if not is_valid_email(student.email or ""):
+            print(f"[EMAIL] Skipping student #{student.id} — no valid email")
             continue
         _send_attendance_email(student.username, student.email, course_name, date_fmt, teacher_name)
+        sent += 1
+
+    print(f"[EMAIL] Queued attendance emails for {sent}/{len(students)} students")
 
 
 def _send_attendance_email(username: str, email: str, course_name: str,
                             date_fmt: str, teacher_name: str):
     content = f"""
     <h2>Attendance Confirmed!</h2>
-    <p class="sub">{course_name} — {date_fmt}</p>
+    <p class="sub">{course_name} &mdash; {date_fmt}</p>
 
     <p>Hi <strong>{username}</strong>,</p>
 
-    <p>Great news! Your attendance for today's class has been successfully recorded. Here are the details:</p>
+    <p>Your attendance for today&rsquo;s class has been successfully recorded. Here are the details:</p>
 
-    <table style="width:100%;border-collapse:collapse;margin:20px 0;border-radius:10px;overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;margin:20px 0;">
       <tr style="background:rgba(108,99,255,0.12);">
-        <td style="padding:12px 16px;font-size:0.8rem;color:{_MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.07em;width:40%;">Course</td>
-        <td style="padding:12px 16px;font-size:0.88rem;color:{_TEXT};font-weight:600;">{course_name}</td>
+        <td style="padding:12px 16px;font-size:0.78rem;color:{_MUTED};font-weight:700;
+                   text-transform:uppercase;letter-spacing:0.07em;width:38%;">Course</td>
+        <td style="padding:12px 16px;font-size:0.86rem;color:{_TEXT};font-weight:600;">{course_name}</td>
       </tr>
       <tr style="background:rgba(255,255,255,0.03);">
-        <td style="padding:12px 16px;font-size:0.8rem;color:{_MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.07em;">Date</td>
-        <td style="padding:12px 16px;font-size:0.88rem;color:{_TEXT};font-weight:600;">{date_fmt}</td>
+        <td style="padding:12px 16px;font-size:0.78rem;color:{_MUTED};font-weight:700;
+                   text-transform:uppercase;letter-spacing:0.07em;">Date</td>
+        <td style="padding:12px 16px;font-size:0.86rem;color:{_TEXT};font-weight:600;">{date_fmt}</td>
       </tr>
       <tr style="background:rgba(108,99,255,0.12);">
-        <td style="padding:12px 16px;font-size:0.8rem;color:{_MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.07em;">Status</td>
-        <td style="padding:12px 16px;">
-          <span style="background:rgba(15,155,88,0.15);color:#0F9B58;border:1px solid rgba(15,155,88,0.3);
-                       border-radius:6px;padding:3px 12px;font-size:0.82rem;font-weight:700;">
-            ✓ Present
-          </span>
-        </td>
+        <td style="padding:12px 16px;font-size:0.78rem;color:{_MUTED};font-weight:700;
+                   text-transform:uppercase;letter-spacing:0.07em;">Status</td>
+        <td style="padding:12px 16px;"><span class="present">Present</span></td>
       </tr>
       <tr style="background:rgba(255,255,255,0.03);">
-        <td style="padding:12px 16px;font-size:0.8rem;color:{_MUTED};font-weight:700;text-transform:uppercase;letter-spacing:0.07em;">Recorded by</td>
-        <td style="padding:12px 16px;font-size:0.88rem;color:{_TEXT};font-weight:600;">{teacher_name}</td>
+        <td style="padding:12px 16px;font-size:0.78rem;color:{_MUTED};font-weight:700;
+                   text-transform:uppercase;letter-spacing:0.07em;">Recorded by</td>
+        <td style="padding:12px 16px;font-size:0.86rem;color:{_TEXT};font-weight:600;">{teacher_name}</td>
       </tr>
     </table>
 
     <hr class="divider"/>
 
-    <p style="font-size:0.85rem;color:{_MUTED};">
-      Keep up the great work! Maintaining a strong attendance record is important for your academic progress. You can view your full attendance history on your
+    <p style="font-size:0.83rem;color:{_MUTED};">
+      Keep up the great work! You can view your full attendance history on your
       <a href="https://cherryberry112.github.io/AttendX/frontend/pages/student/dashboard.html">AttendX Dashboard</a>.
     </p>
     """
 
-    html = _wrap(content, preview=f"Your attendance for {course_name} on {date_fmt} has been confirmed!")
+    html = _wrap(content, preview=f"Your attendance for {course_name} on {date_fmt} has been confirmed.")
     _send_async(email, f"Attendance Recorded — {course_name}", html)
