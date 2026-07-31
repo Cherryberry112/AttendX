@@ -135,13 +135,14 @@ def test_email():
         return jsonify({"error": "Pass ?to=your@email.com"}), 400
 
     sender   = os.environ.get("MAIL_SENDER", "")
+    brevo    = os.environ.get("BREVO_API_KEY", "")
     password = os.environ.get("MAIL_APP_PASSWORD", "").replace(" ", "")
 
-    if not sender or not password:
+    if not brevo and (not sender or not password):
         return jsonify({
-            "error": "Credentials missing in environment",
-            "MAIL_SENDER":       sender or "(empty)",
-            "MAIL_APP_PASSWORD": "(set)" if password else "(empty)",
+            "error": "No email credentials found — set BREVO_API_KEY in Render",
+            "BREVO_API_KEY":  "(empty)",
+            "MAIL_SENDER":    sender or "(empty)",
         }), 500
 
     from utils.notifications import _send

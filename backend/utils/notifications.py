@@ -1,7 +1,7 @@
 """
 AttendX — Email Notification Utilities
-Sends HTML-rich emails via Resend API (HTTPS — works on all hosts including Render free tier).
-Falls back to SMTP if RESEND_API_KEY is not set (for local development).
+Sends HTML-rich emails via Brevo (Sendinblue) API — works on Render free tier.
+Falls back to SMTP if BREVO_API_KEY is not set (for local development).
 """
 import os
 import re
@@ -25,51 +25,54 @@ def is_valid_email(email: str) -> bool:
 
 def _send(to_email: str, subject: str, html: str) -> tuple:
     """Send one HTML email. Returns (success:bool, error_msg:str).
-    Uses Resend API (HTTPS) if RESEND_API_KEY is set, otherwise falls back to SMTP.
+    Uses Brevo API if BREVO_API_KEY is set, otherwise falls back to SMTP.
     """
     if not is_valid_email(to_email):
         msg = f"Invalid recipient: {to_email}"
         print(f"[EMAIL] {msg}")
         return False, msg
 
-    resend_key = os.environ.get("RESEND_API_KEY", "").strip()
-    if resend_key:
-        return _send_via_resend(to_email, subject, html, resend_key)
+    brevo_key = os.environ.get("BREVO_API_KEY", "").strip()
+    if brevo_key:
+        return _send_via_brevo(to_email, subject, html, brevo_key)
     else:
         return _send_via_smtp(to_email, subject, html)
 
 
-def _send_via_resend(to_email: str, subject: str, html: str, api_key: str) -> tuple:
-    """Send via Resend HTTP API — works on Render free tier (uses HTTPS port 443)."""
+def _send_via_brevo(to_email: str, subject: str, html: str, api_key: str) -> tuple:
+    """Send via Brevo (Sendinblue) REST API.
+    Uses Brevo's own servers (NOT Cloudflare-fronted) — works on Render free tier."""
     try:
         import requests as _req
 
+        sender_email = os.environ.get("MAIL_SENDER", "attendx.offitial@gmail.com").strip()
+
         resp = _req.post(
-            "https://api.resend.com/emails",
+            "https://api.brevo.com/v3/smtp/email",
             headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type":  "application/json",
-                "User-Agent":    "AttendX-Mailer/1.0",
+                "api-key":      api_key,
+                "Content-Type": "application/json",
+                "Accept":       "application/json",
             },
             json={
-                "from":    "AttendX <onboarding@resend.dev>",
-                "to":      [to_email],
-                "subject": subject,
-                "html":    html,
+                "sender":      {"name": "AttendX", "email": sender_email},
+                "to":          [{"email": to_email}],
+                "subject":     subject,
+                "htmlContent": html,
             },
             timeout=15,
         )
 
         if resp.status_code in (200, 201):
-            print(f"[EMAIL] Resend OK: '{subject}' -> {to_email}")
+            print(f"[EMAIL] Brevo OK: '{subject}' -> {to_email}")
             return True, ""
         else:
-            msg = f"Resend HTTP {resp.status_code}: {resp.text[:200]}"
+            msg = f"Brevo HTTP {resp.status_code}: {resp.text[:300]}"
             print(f"[EMAIL] {msg}")
             return False, msg
 
     except Exception as exc:
-        msg = f"Resend exception: {exc}"
+        msg = f"Brevo exception: {exc}"
         print(f"[EMAIL] {msg}")
         return False, msg
 
