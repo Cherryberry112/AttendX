@@ -10,11 +10,9 @@ from datetime import datetime
 
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 
-_BRAND_COLOR = "#6C63FF"
-_BG          = "#0D0D1A"
-_CARD_BG     = "#13131F"
-_TEXT        = "#E2E2F0"
-_MUTED       = "#8A8AA0"
+_BRAND_PURPLE = "#6C63FF"
+_BRAND_DARK   = "#4834D4"
+_SUCCESS_GREEN = "#0F9B58"
 
 
 def is_valid_email(email: str) -> bool:
@@ -24,9 +22,7 @@ def is_valid_email(email: str) -> bool:
 # ── Low-level sender ──────────────────────────────────────────────────────────
 
 def _send(to_email: str, subject: str, html: str) -> tuple:
-    """Send one HTML email. Returns (success:bool, error_msg:str).
-    Uses Brevo API if BREVO_API_KEY is set, otherwise falls back to SMTP.
-    """
+    """Send one HTML email. Returns (success:bool, error_msg:str)."""
     if not is_valid_email(to_email):
         msg = f"Invalid recipient: {to_email}"
         print(f"[EMAIL] {msg}")
@@ -40,8 +36,7 @@ def _send(to_email: str, subject: str, html: str) -> tuple:
 
 
 def _send_via_brevo(to_email: str, subject: str, html: str, api_key: str) -> tuple:
-    """Send via Brevo (Sendinblue) REST API.
-    Uses Brevo's own servers (NOT Cloudflare-fronted) — works on Render free tier."""
+    """Send via Brevo (Sendinblue) REST API."""
     try:
         import requests as _req
 
@@ -78,7 +73,7 @@ def _send_via_brevo(to_email: str, subject: str, html: str, api_key: str) -> tup
 
 
 def _send_via_smtp(to_email: str, subject: str, html: str) -> tuple:
-    """Fallback: send via Gmail SMTP (works locally, blocked on Render free tier)."""
+    """Fallback: send via Gmail SMTP for local dev."""
     import smtplib, ssl as _ssl
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -87,7 +82,7 @@ def _send_via_smtp(to_email: str, subject: str, html: str) -> tuple:
     password = os.environ.get("MAIL_APP_PASSWORD", "").replace(" ", "").strip()
 
     if not sender or not password:
-        msg = "No RESEND_API_KEY and no SMTP credentials set"
+        msg = "No BREVO_API_KEY and no SMTP credentials set"
         print(f"[EMAIL] {msg}")
         return False, msg
 
@@ -121,7 +116,6 @@ def _send_via_smtp(to_email: str, subject: str, html: str) -> tuple:
 
 
 def _send_async(to_email: str, subject: str, html: str):
-    """Fire-and-forget in a daemon thread."""
     def _run():
         ok, err = _send(to_email, subject, html)
         if not ok:
@@ -129,70 +123,67 @@ def _send_async(to_email: str, subject: str, html: str):
     threading.Thread(target=_run, daemon=True).start()
 
 
-# ── Shared HTML shell ─────────────────────────────────────────────────────────
+# ── Shared Email Card Layout (Inline CSS for 100% Email Client Support) ────────
 
-def _wrap(content: str, preview: str = "") -> str:
+def _wrap_email(header_title: str, header_subtitle: str, body_content: str, to_email: str, header_color: str = _BRAND_PURPLE) -> str:
+    """Wraps body content inside a beautiful, responsive card layout in AttendX theme."""
     year = datetime.now().year
-    preview_tag = (
-        f'<span style="display:none;font-size:0;max-height:0;overflow:hidden;">{preview}</span>'
-        if preview else ""
-    )
+    subtitle_html = f'<p style="margin: 6px 0 0 0; font-size: 14px; color: rgba(255, 255, 255, 0.88); font-weight: 400;">{header_subtitle}</p>' if header_subtitle else ""
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>AttendX</title>
-  {preview_tag}
-  <style>
-    body      {{ margin:0; padding:0; background:{_BG}; font-family:'Segoe UI',Arial,sans-serif; color:{_TEXT}; }}
-    a         {{ color:{_BRAND_COLOR}; text-decoration:none; }}
-    .shell    {{ max-width:600px; margin:40px auto; background:{_CARD_BG}; border-radius:16px;
-                 border:1px solid rgba(108,99,255,0.18); overflow:hidden;
-                 box-shadow:0 8px 40px rgba(0,0,0,0.5); }}
-    .top-bar  {{ background:linear-gradient(135deg,#6C63FF 0%,#9B59B6 100%);
-                 padding:30px 40px 26px; text-align:center; }}
-    .logo-box {{ display:inline-flex; align-items:center; gap:12px; }}
-    .logo-icon{{ width:44px; height:44px; background:rgba(255,255,255,0.2); border-radius:10px;
-                 display:flex; align-items:center; justify-content:center;
-                 font-size:1rem; font-weight:900; color:#fff; }}
-    .logo-txt {{ font-size:1.5rem; font-weight:800; color:#fff; letter-spacing:-0.5px; }}
-    .logo-txt span {{ color:rgba(255,255,255,0.65); }}
-    .body     {{ padding:36px 40px; }}
-    .footer   {{ padding:18px 40px; text-align:center; background:rgba(0,0,0,0.25);
-                 border-top:1px solid rgba(255,255,255,0.05); }}
-    .footer p {{ margin:0; font-size:0.72rem; color:{_MUTED}; line-height:1.8; }}
-    h2        {{ margin:0 0 6px; font-size:1.3rem; font-weight:800; color:#fff; }}
-    .sub      {{ font-size:0.84rem; color:{_MUTED}; margin:0 0 26px; }}
-    p         {{ font-size:0.88rem; line-height:1.7; color:{_TEXT}; margin:0 0 14px; }}
-    .divider  {{ border:none; border-top:1px solid rgba(255,255,255,0.07); margin:22px 0; }}
-    .badge    {{ display:inline-block; background:rgba(108,99,255,0.15); color:{_BRAND_COLOR};
-                 border:1px solid rgba(108,99,255,0.3); border-radius:6px;
-                 font-size:0.76rem; font-weight:700; padding:3px 10px; }}
-    .present  {{ background:rgba(15,155,88,0.15); color:#0F9B58;
-                 border:1px solid rgba(15,155,88,0.3); border-radius:6px;
-                 padding:3px 12px; font-size:0.82rem; font-weight:700; }}
-  </style>
 </head>
-<body>
-<div class="shell">
-  <div class="top-bar">
-    <div class="logo-box">
-      <div class="logo-icon">AX</div>
-      <div class="logo-txt">Attend<span>X</span></div>
-    </div>
-  </div>
-  <div class="body">{content}</div>
-  <div class="footer">
-    <p>&copy; {year} AttendX &mdash; Smart Attendance System<br>
-    This is an automated message. Please do not reply.</p>
-  </div>
-</div>
+<body style="margin: 0; padding: 0; background-color: #F4F5FB; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  <!-- Background Table -->
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F4F5FB; padding: 40px 12px;">
+    <tr>
+      <td align="center">
+        <!-- Main Card -->
+        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 560px; background-color: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 8px 30px rgba(108, 99, 255, 0.12); border: 1px solid #E2E8F0;">
+          
+          <!-- Top Header Banner -->
+          <tr>
+            <td align="center" style="background-color: {header_color}; background: linear-gradient(135deg, {header_color} 0%, {_BRAND_DARK} 100%); padding: 36px 28px; text-align: center;">
+              <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.18); border-radius: 8px; padding: 4px 12px; margin-bottom: 12px;">
+                <span style="font-weight: 800; color: #ffffff; font-size: 13px; letter-spacing: 1.5px;">ATTENDX</span>
+              </div>
+              <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #ffffff; line-height: 1.3; letter-spacing: -0.3px;">{header_title}</h1>
+              {subtitle_html}
+            </td>
+          </tr>
+
+          <!-- Main Body -->
+          <tr>
+            <td style="padding: 36px 32px; background-color: #ffffff; color: #2D3748; font-size: 15px; line-height: 1.65;">
+              {body_content}
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="background-color: #F8F9FA; padding: 22px 32px; border-top: 1px solid #EDF2F7; text-align: center;">
+              <p style="margin: 0 0 4px 0; font-size: 12px; color: #718096; line-height: 1.5;">
+                &copy; {year} <strong>AttendX</strong> &mdash; Smart Attendance System
+              </p>
+              <p style="margin: 0; font-size: 11px; color: #A0AEC0; line-height: 1.5;">
+                This automated notification was sent to <span style="color: #6C63FF;">{to_email}</span>.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>"""
 
 
-# ── Registration email ────────────────────────────────────────────────────────
+# ── Registration Email ────────────────────────────────────────────────────────
 
 def send_registration_email(username: str, email: str, role: str):
     if not is_valid_email(email):
@@ -204,33 +195,43 @@ def send_registration_email(username: str, email: str, role: str):
         "student": "Your first step is to enroll your face from the student dashboard so you can be recognized automatically in class.",
         "teacher": "You can begin taking live attendance for your courses right away from the teacher dashboard.",
         "admin":   "You have full access to manage users, courses, and attendance records across the system.",
-    }.get(role, "We are glad to have you on board.")
+    }.get(role.lower(), "We are glad to have you on board.")
 
-    content = f"""
-    <h2>Welcome to AttendX, {username}!</h2>
-    <p class="sub">Your account has been successfully created</p>
-    <p>Thank you for joining <strong>AttendX</strong> &mdash; the smart face-recognition attendance platform.
-    Your account is now active and ready to use.</p>
-    <hr class="divider"/>
-    <p style="font-size:0.78rem;color:{_MUTED};margin-bottom:6px;text-transform:uppercase;
-              letter-spacing:0.08em;font-weight:700;">Your Role</p>
-    <p><span class="badge">{role_label}</span></p>
-    <p style="margin-top:18px;">{role_tip}</p>
-    <hr class="divider"/>
-    <p style="font-size:0.82rem;color:{_MUTED};">
-      <strong>Next steps:</strong> Head over to your
-      <a href="https://cherryberry112.github.io/AttendX/">AttendX Dashboard</a>
-      and sign in with your email and password to get started.
-    </p>"""
+    body = f"""
+    <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: {_BRAND_PURPLE};">Hello, {username}!</h2>
+    
+    <p style="margin: 0 0 20px 0; color: #4A5568; font-size: 15px; line-height: 1.6;">
+      Thank you for joining <strong>AttendX</strong> — the smart face-recognition attendance platform. Your account is now active and ready to use.
+    </p>
 
-    html = _wrap(content, f"Welcome to AttendX, {username}! Your account is ready.")
+    <!-- Role Card -->
+    <div style="background-color: #F5F4FF; border-left: 4px solid {_BRAND_PURPLE}; border-radius: 8px; padding: 18px 20px; margin: 24px 0;">
+      <p style="margin: 0 0 4px 0; font-size: 11px; text-transform: uppercase; font-weight: 800; color: {_BRAND_PURPLE}; letter-spacing: 1px;">Account Role</p>
+      <p style="margin: 0 0 8px 0; font-size: 16px; font-weight: 700; color: #1A202C;">{role_label}</p>
+      <p style="margin: 0; font-size: 14px; color: #4A5568; line-height: 1.5;">{role_tip}</p>
+    </div>
+
+    <!-- CTA Button -->
+    <div style="text-align: center; margin: 32px 0 16px 0;">
+      <a href="https://cherryberry112.github.io/AttendX/" target="_blank" style="display: inline-block; background-color: {_BRAND_PURPLE}; background: linear-gradient(135deg, {_BRAND_PURPLE} 0%, {_BRAND_DARK} 100%); color: #ffffff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 14px rgba(108, 99, 255, 0.35);">
+        Go to Your Dashboard &rarr;
+      </a>
+    </div>
+    """
+
+    html = _wrap_email(
+        header_title=f"Welcome to AttendX!",
+        header_subtitle="Your smart attendance journey starts now.",
+        body_content=body,
+        to_email=email,
+        header_color=_BRAND_PURPLE
+    )
     _send_async(email, f"Welcome to AttendX, {username}!", html)
 
 
-# ── Attendance confirmation email ─────────────────────────────────────────────
+# ── Attendance Confirmation Email ─────────────────────────────────────────────
 
-def notify_students_attendance(student_ids: list, course_name: str, att_date: str,
-                                teacher_name: str = "Your teacher"):
+def notify_students_attendance(student_ids: list, course_name: str, att_date: str, teacher_name: str = "Your teacher"):
     from models import User
     try:
         date_fmt = datetime.strptime(att_date, "%Y-%m-%d").strftime("%A, %B %d, %Y")
@@ -247,40 +248,51 @@ def notify_students_attendance(student_ids: list, course_name: str, att_date: st
     print(f"[EMAIL] Queued attendance emails for {sent}/{len(students)} students")
 
 
-def _send_attendance_email(username: str, email: str, course_name: str,
-                            date_fmt: str, teacher_name: str):
-    content = f"""
-    <h2>Attendance Confirmed!</h2>
-    <p class="sub">{course_name} &mdash; {date_fmt}</p>
-    <p>Hi <strong>{username}</strong>,</p>
-    <p>Your attendance for today&rsquo;s class has been successfully recorded.</p>
-    <table style="width:100%;border-collapse:collapse;margin:20px 0;">
-      <tr style="background:rgba(108,99,255,0.12);">
-        <td style="padding:12px 16px;font-size:0.78rem;color:{_MUTED};font-weight:700;
-                   text-transform:uppercase;letter-spacing:0.07em;width:38%;">Course</td>
-        <td style="padding:12px 16px;font-size:0.86rem;color:{_TEXT};font-weight:600;">{course_name}</td>
+def _send_attendance_email(username: str, email: str, course_name: str, date_fmt: str, teacher_name: str):
+    body = f"""
+    <h2 style="margin: 0 0 16px 0; font-size: 20px; font-weight: 700; color: {_SUCCESS_GREEN};">Hello, {username}!</h2>
+    
+    <p style="margin: 0 0 20px 0; color: #4A5568; font-size: 15px; line-height: 1.6;">
+      Great news! Your attendance for today's class has been successfully recorded into the system.
+    </p>
+
+    <!-- Details Table -->
+    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #F8FAFC; border-radius: 10px; border: 1px solid #E2E8F0; overflow: hidden; margin: 24px 0;">
+      <tr>
+        <td style="padding: 14px 18px; font-size: 13px; font-weight: 700; color: #718096; border-bottom: 1px solid #EDF2F7; width: 35%;">Course</td>
+        <td style="padding: 14px 18px; font-size: 14px; font-weight: 700; color: #1A202C; border-bottom: 1px solid #EDF2F7;">{course_name}</td>
       </tr>
-      <tr style="background:rgba(255,255,255,0.03);">
-        <td style="padding:12px 16px;font-size:0.78rem;color:{_MUTED};font-weight:700;
-                   text-transform:uppercase;letter-spacing:0.07em;">Date</td>
-        <td style="padding:12px 16px;font-size:0.86rem;color:{_TEXT};font-weight:600;">{date_fmt}</td>
+      <tr>
+        <td style="padding: 14px 18px; font-size: 13px; font-weight: 700; color: #718096; border-bottom: 1px solid #EDF2F7;">Date</td>
+        <td style="padding: 14px 18px; font-size: 14px; font-weight: 600; color: #2D3748; border-bottom: 1px solid #EDF2F7;">{date_fmt}</td>
       </tr>
-      <tr style="background:rgba(108,99,255,0.12);">
-        <td style="padding:12px 16px;font-size:0.78rem;color:{_MUTED};font-weight:700;
-                   text-transform:uppercase;letter-spacing:0.07em;">Status</td>
-        <td style="padding:12px 16px;"><span class="present">Present</span></td>
+      <tr>
+        <td style="padding: 14px 18px; font-size: 13px; font-weight: 700; color: #718096; border-bottom: 1px solid #EDF2F7;">Status</td>
+        <td style="padding: 14px 18px; border-bottom: 1px solid #EDF2F7;">
+          <span style="display: inline-block; background-color: #E6F4EA; color: {_SUCCESS_GREEN}; font-weight: 800; font-size: 12px; padding: 4px 12px; border-radius: 6px; border: 1px solid #A8DADC;">
+            &check; PRESENT
+          </span>
+        </td>
       </tr>
-      <tr style="background:rgba(255,255,255,0.03);">
-        <td style="padding:12px 16px;font-size:0.78rem;color:{_MUTED};font-weight:700;
-                   text-transform:uppercase;letter-spacing:0.07em;">Recorded by</td>
-        <td style="padding:12px 16px;font-size:0.86rem;color:{_TEXT};font-weight:600;">{teacher_name}</td>
+      <tr>
+        <td style="padding: 14px 18px; font-size: 13px; font-weight: 700; color: #718096;">Instructor</td>
+        <td style="padding: 14px 18px; font-size: 14px; font-weight: 600; color: #2D3748;">{teacher_name}</td>
       </tr>
     </table>
-    <hr class="divider"/>
-    <p style="font-size:0.83rem;color:{_MUTED};">
-      Keep up the great work! View your full attendance history on your
-      <a href="https://cherryberry112.github.io/AttendX/frontend/pages/student/dashboard.html">AttendX Dashboard</a>.
-    </p>"""
 
-    html = _wrap(content, f"Your attendance for {course_name} on {date_fmt} has been confirmed.")
+    <!-- CTA Button -->
+    <div style="text-align: center; margin: 32px 0 16px 0;">
+      <a href="https://cherryberry112.github.io/AttendX/frontend/pages/student/dashboard.html" target="_blank" style="display: inline-block; background-color: {_BRAND_PURPLE}; background: linear-gradient(135deg, {_BRAND_PURPLE} 0%, {_BRAND_DARK} 100%); color: #ffffff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 14px rgba(108, 99, 255, 0.35);">
+        View Attendance History &rarr;
+      </a>
+    </div>
+    """
+
+    html = _wrap_email(
+        header_title="Attendance Confirmed!",
+        header_subtitle=f"{course_name} &bull; {date_fmt}",
+        body_content=body,
+        to_email=email,
+        header_color=_BRAND_PURPLE
+    )
     _send_async(email, f"Attendance Recorded — {course_name}", html)
