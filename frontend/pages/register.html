@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Register — AttendX</title>
+  <meta name="description" content="Create your AttendX account as a teacher or student."/>
+  <link rel="stylesheet" href="../css/global.css"/>
+  <link rel="stylesheet" href="../css/auth.css"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+<div class="auth-page">
+  <div class="auth-card" style="max-width:500px">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">AX</div>
+      <h1>Create Account</h1>
+      <p>Join AttendX — choose your role below</p>
+    </div>
+
+    <!-- Role selector (teacher / student only) -->
+    <div class="form-group">
+      <label class="form-label">I am a…</label>
+      <div class="role-selector">
+        <div class="role-option selected" data-role="student" id="role-student">
+          <span><i data-lucide="graduation-cap"></i></span><span>Student</span>
+        </div>
+        <div class="role-option" data-role="teacher" id="role-teacher">
+          <span><i data-lucide="award"></i></span><span>Teacher</span>
+        </div>
+      </div>
+    </div>
+
+    <form id="registerForm" novalidate>
+      <input type="hidden" id="selectedRole" value="student"/>
+
+      <!-- Name + Email (both mandatory) -->
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label" for="regUsername">Full Name <span style="color:var(--danger)">*</span></label>
+          <input id="regUsername" type="text" class="form-control" placeholder="Ahmed Rahman" required autocomplete="name"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="regEmail">Email <span style="color:var(--danger)">*</span></label>
+          <input id="regEmail" type="email" class="form-control" placeholder="you@uni.edu" required autocomplete="email"/>
+          <small id="emailFeedback" style="font-size:0.72rem;margin-top:0.25rem;display:block;"></small>
+        </div>
+      </div>
+
+      <!-- Password (mandatory) -->
+      <div class="form-group">
+        <label class="form-label" for="regPassword">Password <span style="color:var(--danger)">*</span></label>
+        <div class="input-group">
+          <span class="input-icon"><i data-lucide="lock"></i></span>
+          <input id="regPassword" type="password" class="form-control" placeholder="Min. 8 characters" required minlength="8" autocomplete="new-password"/>
+        </div>
+      </div>
+
+      <!-- Phone (optional) -->
+      <div class="form-group">
+        <label class="form-label" for="regPhone">Phone Number <span style="color:var(--color-muted);font-size:0.78rem;">(optional)</span></label>
+        <input id="regPhone" type="tel" class="form-control" placeholder="+880 1XXX XXXXXX" autocomplete="tel"/>
+      </div>
+
+      <!-- Student-only fields -->
+      <div id="student-fields">
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label" for="studentId">Student ID <span style="color:var(--danger)">*</span></label>
+            <input id="studentId" type="text" class="form-control" placeholder="2022-3-60-110"/>
+            <small id="sidFeedback" style="font-size:0.72rem;margin-top:0.25rem;display:block;"></small>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="guardianNumber">Guardian Phone <span style="color:var(--color-muted);font-size:0.78rem;">(optional)</span></label>
+            <input id="guardianNumber" type="tel" class="form-control" placeholder="+880 1XXX XXXXXX"/>
+          </div>
+        </div>
+      </div>
+
+      <div id="teacher-fields" class="hidden"></div>
+
+      <button type="submit" class="btn btn-primary btn-block btn-lg" id="regBtn" style="margin-top:0.5rem">
+        Create Account
+      </button>
+    </form>
+
+    <div class="auth-footer-text">
+      Already have an account? <a href="../index.html">Sign in &rarr;</a>
+    </div>
+  </div>
+</div>
+
+<script src="../js/utils.js"></script>
+<script>
+  const EMAIL_RE = /^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$/;
+  const SID_RE   = /^\d{4}-\d{1,2}-\d{2}-\d{3}$/;
+
+  // ── Role switcher ──
+  document.querySelectorAll(".role-option").forEach(opt => {
+    opt.addEventListener("click", () => {
+      document.querySelectorAll(".role-option").forEach(o => o.classList.remove("selected"));
+      opt.classList.add("selected");
+      const role = opt.dataset.role;
+      document.getElementById("selectedRole").value = role;
+      document.getElementById("student-fields").classList.toggle("hidden", role !== "student");
+    });
+  });
+
+  // ── Live email validation ──
+  const emailInput = document.getElementById("regEmail");
+  const emailFb    = document.getElementById("emailFeedback");
+  emailInput.addEventListener("input", () => {
+    const val = emailInput.value.trim();
+    if (!val) { emailFb.textContent = ""; return; }
+    if (EMAIL_RE.test(val)) {
+      emailFb.textContent = "Valid email address";
+      emailFb.style.color = "var(--success)";
+    } else {
+      emailFb.textContent = "Please enter a valid email (e.g. you@example.com)";
+      emailFb.style.color = "var(--danger)";
+    }
+  });
+
+  // ── Live student ID validation ──
+  const sidInput = document.getElementById("studentId");
+  sidInput.addEventListener("input", () => {
+    const val = sidInput.value.trim();
+    const fb  = document.getElementById("sidFeedback");
+    if (!val) { fb.textContent = ""; return; }
+    if (SID_RE.test(val)) {
+      fb.textContent = "Valid format";
+      fb.style.color = "var(--success)";
+    } else {
+      fb.textContent = "Format: YYYY-D-DD-DDD  (e.g. 2022-3-60-110)";
+      fb.style.color = "var(--danger)";
+    }
+  });
+
+  // ── Submit ──
+  document.getElementById("registerForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn  = document.getElementById("regBtn");
+    const type = document.getElementById("selectedRole").value;
+
+    // Client-side email check before hitting the server
+    const emailVal = emailInput.value.trim();
+    if (!EMAIL_RE.test(emailVal)) {
+      showToast("Please enter a valid email address", "error");
+      return;
+    }
+
+    btn.textContent = "Creating account…";
+    btn.disabled = true;
+
+    const payload = {
+      username: document.getElementById("regUsername").value.trim(),
+      email:    emailVal,
+      password: document.getElementById("regPassword").value,
+      phone:    document.getElementById("regPhone").value.trim() || undefined,
+      type,
+    };
+
+    if (type === "student") {
+      payload.student_id      = document.getElementById("studentId").value.trim();
+      payload.guardian_number = document.getElementById("guardianNumber").value.trim() || undefined;
+    }
+
+    try {
+      await api.post("/auth/register", payload);
+      showToast("Account created! Check your email, then sign in.", "success");
+      setTimeout(() => window.location.href = "../index.html", 1800);
+    } catch (err) {
+      showToast(err.message, "error");
+      btn.textContent = "Create Account";
+      btn.disabled = false;
+    }
+  });
+</script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.lucide) lucide.createIcons();
+  });
+</script>
+</body>
+</html>
