@@ -40,39 +40,36 @@ def _send(to_email: str, subject: str, html: str) -> tuple:
 
 
 def _send_via_resend(to_email: str, subject: str, html: str, api_key: str) -> tuple:
-    """Send via Resend HTTP API — works on Render free tier."""
+    """Send via Resend HTTP API — works on Render free tier (uses HTTPS port 443)."""
     try:
-        import urllib.request
-        import urllib.error
-        import json as _json
+        import requests as _req
 
-        payload = _json.dumps({
-            "from":    "AttendX <onboarding@resend.dev>",
-            "to":      [to_email],
-            "subject": subject,
-            "html":    html,
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
+        resp = _req.post(
             "https://api.resend.com/emails",
-            data=payload,
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type":  "application/json",
+                "User-Agent":    "AttendX-Mailer/1.0",
             },
-            method="POST",
+            json={
+                "from":    "AttendX <onboarding@resend.dev>",
+                "to":      [to_email],
+                "subject": subject,
+                "html":    html,
+            },
+            timeout=15,
         )
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            body = resp.read().decode()
-            print(f"[EMAIL] Resend sent '{subject}' -> {to_email} | {body}")
+
+        if resp.status_code in (200, 201):
+            print(f"[EMAIL] Resend OK: '{subject}' -> {to_email}")
             return True, ""
-    except urllib.error.HTTPError as e:
-        body = e.read().decode()
-        msg  = f"Resend HTTP {e.code}: {body}"
-        print(f"[EMAIL] {msg}")
-        return False, msg
+        else:
+            msg = f"Resend HTTP {resp.status_code}: {resp.text[:200]}"
+            print(f"[EMAIL] {msg}")
+            return False, msg
+
     except Exception as exc:
-        msg = f"Resend error: {exc}"
+        msg = f"Resend exception: {exc}"
         print(f"[EMAIL] {msg}")
         return False, msg
 
