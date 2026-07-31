@@ -1,16 +1,14 @@
 """
 AttendX — Email Notification Utilities
-Sends HTML-rich welcome and attendance emails via Gmail SMTP.
+Sends HTML-rich emails via Resend API (HTTPS — works on all hosts including Render free tier).
+Falls back to SMTP if RESEND_API_KEY is not set (for local development).
 """
 import os
 import re
-import smtplib
 import threading
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from datetime import datetime
 
-SMTP_HOST = "smtp.gmail.com"
+EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
 
 _BRAND_COLOR = "#6C63FF"
 _BG          = "#0D0D1A"
@@ -18,11 +16,8 @@ _CARD_BG     = "#13131F"
 _TEXT        = "#E2E2F0"
 _MUTED       = "#8A8AA0"
 
-EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
-
 
 def is_valid_email(email: str) -> bool:
-    """Return True if the email looks like a real address."""
     return bool(email) and bool(EMAIL_REGEX.match(email.strip()))
 
 
@@ -30,19 +25,69 @@ def is_valid_email(email: str) -> bool:
 
 def _send(to_email: str, subject: str, html: str) -> tuple:
     """Send one HTML email. Returns (success:bool, error_msg:str).
-    Tries port 465 (SSL) first, falls back to port 587 (STARTTLS).
-    Credentials are read at call-time so Render env vars are always picked up.
+    Uses Resend API (HTTPS) if RESEND_API_KEY is set, otherwise falls back to SMTP.
     """
+    if not is_valid_email(to_email):
+        msg = f"Invalid recipient: {to_email}"
+        print(f"[EMAIL] {msg}")
+        return False, msg
+
+    resend_key = os.environ.get("RESEND_API_KEY", "").strip()
+    if resend_key:
+        return _send_via_resend(to_email, subject, html, resend_key)
+    else:
+        return _send_via_smtp(to_email, subject, html)
+
+
+def _send_via_resend(to_email: str, subject: str, html: str, api_key: str) -> tuple:
+    """Send via Resend HTTP API — works on Render free tier."""
+    try:
+        import urllib.request
+        import urllib.error
+        import json as _json
+
+        payload = _json.dumps({
+            "from":    "AttendX <onboarding@resend.dev>",
+            "to":      [to_email],
+            "subject": subject,
+            "html":    html,
+        }).encode("utf-8")
+
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type":  "application/json",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = resp.read().decode()
+            print(f"[EMAIL] Resend sent '{subject}' -> {to_email} | {body}")
+            return True, ""
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        msg  = f"Resend HTTP {e.code}: {body}"
+        print(f"[EMAIL] {msg}")
+        return False, msg
+    except Exception as exc:
+        msg = f"Resend error: {exc}"
+        print(f"[EMAIL] {msg}")
+        return False, msg
+
+
+def _send_via_smtp(to_email: str, subject: str, html: str) -> tuple:
+    """Fallback: send via Gmail SMTP (works locally, blocked on Render free tier)."""
+    import smtplib, ssl as _ssl
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
     sender   = os.environ.get("MAIL_SENDER", "").strip()
     password = os.environ.get("MAIL_APP_PASSWORD", "").replace(" ", "").strip()
 
     if not sender or not password:
-        msg = f"MAIL_SENDER or MAIL_APP_PASSWORD not set (sender={sender!r})"
-        print(f"[EMAIL] {msg}")
-        return False, msg
-
-    if not is_valid_email(to_email):
-        msg = f"Invalid recipient address: {to_email}"
+        msg = "No RESEND_API_KEY and no SMTP credentials set"
         print(f"[EMAIL] {msg}")
         return False, msg
 
@@ -53,40 +98,35 @@ def _send(to_email: str, subject: str, html: str) -> tuple:
     email_msg.attach(MIMEText(html, "html", "utf-8"))
     raw = email_msg.as_string()
 
-    # Try port 465 (SSL) first — less likely to be blocked on cloud hosts
     last_error = ""
     for method, port in [("ssl", 465), ("starttls", 587)]:
         try:
             if method == "ssl":
-                import ssl as _ssl
                 ctx = _ssl.create_default_context()
-                with smtplib.SMTP_SSL(SMTP_HOST, port, context=ctx, timeout=15) as server:
-                    server.login(sender, password)
-                    server.sendmail(sender, [to_email], raw)
+                with smtplib.SMTP_SSL("smtp.gmail.com", port, context=ctx, timeout=15) as s:
+                    s.login(sender, password)
+                    s.sendmail(sender, [to_email], raw)
             else:
-                with smtplib.SMTP(SMTP_HOST, port, timeout=15) as server:
-                    server.ehlo()
-                    server.starttls()
-                    server.ehlo()
-                    server.login(sender, password)
-                    server.sendmail(sender, [to_email], raw)
-            print(f"[EMAIL] Sent via port {port}: '{subject}' -> {to_email}")
+                with smtplib.SMTP("smtp.gmail.com", port, timeout=15) as s:
+                    s.ehlo(); s.starttls(); s.ehlo()
+                    s.login(sender, password)
+                    s.sendmail(sender, [to_email], raw)
+            print(f"[EMAIL] SMTP port {port}: sent '{subject}' -> {to_email}")
             return True, ""
         except Exception as exc:
-            last_error = f"port {port} ({method}): {exc}"
-            print(f"[EMAIL] Failed {last_error}")
+            last_error = f"port {port}: {exc}"
+            print(f"[EMAIL] SMTP {last_error}")
 
     return False, last_error
 
 
 def _send_async(to_email: str, subject: str, html: str):
-    """Fire-and-forget — runs in a daemon thread so routes never block."""
+    """Fire-and-forget in a daemon thread."""
     def _run():
         ok, err = _send(to_email, subject, html)
         if not ok:
-            print(f"[EMAIL] Async send failed: {err}")
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
+            print(f"[EMAIL] Async failed: {err}")
+    threading.Thread(target=_run, daemon=True).start()
 
 
 # ── Shared HTML shell ─────────────────────────────────────────────────────────
@@ -115,7 +155,7 @@ def _wrap(content: str, preview: str = "") -> str:
     .logo-box {{ display:inline-flex; align-items:center; gap:12px; }}
     .logo-icon{{ width:44px; height:44px; background:rgba(255,255,255,0.2); border-radius:10px;
                  display:flex; align-items:center; justify-content:center;
-                 font-size:1rem; font-weight:900; color:#fff; letter-spacing:-1px; }}
+                 font-size:1rem; font-weight:900; color:#fff; }}
     .logo-txt {{ font-size:1.5rem; font-weight:800; color:#fff; letter-spacing:-0.5px; }}
     .logo-txt span {{ color:rgba(255,255,255,0.65); }}
     .body     {{ padding:36px 40px; }}
@@ -132,7 +172,6 @@ def _wrap(content: str, preview: str = "") -> str:
     .present  {{ background:rgba(15,155,88,0.15); color:#0F9B58;
                  border:1px solid rgba(15,155,88,0.3); border-radius:6px;
                  padding:3px 12px; font-size:0.82rem; font-weight:700; }}
-    table td  {{ vertical-align:middle; }}
   </style>
 </head>
 <body>
@@ -143,9 +182,7 @@ def _wrap(content: str, preview: str = "") -> str:
       <div class="logo-txt">Attend<span>X</span></div>
     </div>
   </div>
-  <div class="body">
-    {content}
-  </div>
+  <div class="body">{content}</div>
   <div class="footer">
     <p>&copy; {year} AttendX &mdash; Smart Attendance System<br>
     This is an automated message. Please do not reply.</p>
@@ -158,9 +195,8 @@ def _wrap(content: str, preview: str = "") -> str:
 # ── Registration email ────────────────────────────────────────────────────────
 
 def send_registration_email(username: str, email: str, role: str):
-    """Send a welcome email when a brand-new account is created."""
     if not is_valid_email(email):
-        print(f"[EMAIL] Registration email skipped — invalid address: {email}")
+        print(f"[EMAIL] Skipping registration email — invalid address: {email}")
         return
 
     role_label = role.capitalize()
@@ -173,28 +209,21 @@ def send_registration_email(username: str, email: str, role: str):
     content = f"""
     <h2>Welcome to AttendX, {username}!</h2>
     <p class="sub">Your account has been successfully created</p>
-
     <p>Thank you for joining <strong>AttendX</strong> &mdash; the smart face-recognition attendance platform.
     Your account is now active and ready to use.</p>
-
     <hr class="divider"/>
-
     <p style="font-size:0.78rem;color:{_MUTED};margin-bottom:6px;text-transform:uppercase;
               letter-spacing:0.08em;font-weight:700;">Your Role</p>
     <p><span class="badge">{role_label}</span></p>
-
     <p style="margin-top:18px;">{role_tip}</p>
-
     <hr class="divider"/>
-
     <p style="font-size:0.82rem;color:{_MUTED};">
       <strong>Next steps:</strong> Head over to your
       <a href="https://cherryberry112.github.io/AttendX/">AttendX Dashboard</a>
       and sign in with your email and password to get started.
-    </p>
-    """
+    </p>"""
 
-    html = _wrap(content, preview=f"Welcome to AttendX, {username}! Your account is ready.")
+    html = _wrap(content, f"Welcome to AttendX, {username}! Your account is ready.")
     _send_async(email, f"Welcome to AttendX, {username}!", html)
 
 
@@ -202,9 +231,7 @@ def send_registration_email(username: str, email: str, role: str):
 
 def notify_students_attendance(student_ids: list, course_name: str, att_date: str,
                                 teacher_name: str = "Your teacher"):
-    """Send attendance confirmation emails to all present students with valid emails."""
     from models import User
-
     try:
         date_fmt = datetime.strptime(att_date, "%Y-%m-%d").strftime("%A, %B %d, %Y")
     except Exception:
@@ -214,11 +241,9 @@ def notify_students_attendance(student_ids: list, course_name: str, att_date: st
     sent = 0
     for student in students:
         if not is_valid_email(student.email or ""):
-            print(f"[EMAIL] Skipping student #{student.id} — no valid email")
             continue
         _send_attendance_email(student.username, student.email, course_name, date_fmt, teacher_name)
         sent += 1
-
     print(f"[EMAIL] Queued attendance emails for {sent}/{len(students)} students")
 
 
@@ -227,11 +252,8 @@ def _send_attendance_email(username: str, email: str, course_name: str,
     content = f"""
     <h2>Attendance Confirmed!</h2>
     <p class="sub">{course_name} &mdash; {date_fmt}</p>
-
     <p>Hi <strong>{username}</strong>,</p>
-
-    <p>Your attendance for today&rsquo;s class has been successfully recorded. Here are the details:</p>
-
+    <p>Your attendance for today&rsquo;s class has been successfully recorded.</p>
     <table style="width:100%;border-collapse:collapse;margin:20px 0;">
       <tr style="background:rgba(108,99,255,0.12);">
         <td style="padding:12px 16px;font-size:0.78rem;color:{_MUTED};font-weight:700;
@@ -254,14 +276,11 @@ def _send_attendance_email(username: str, email: str, course_name: str,
         <td style="padding:12px 16px;font-size:0.86rem;color:{_TEXT};font-weight:600;">{teacher_name}</td>
       </tr>
     </table>
-
     <hr class="divider"/>
-
     <p style="font-size:0.83rem;color:{_MUTED};">
-      Keep up the great work! You can view your full attendance history on your
+      Keep up the great work! View your full attendance history on your
       <a href="https://cherryberry112.github.io/AttendX/frontend/pages/student/dashboard.html">AttendX Dashboard</a>.
-    </p>
-    """
+    </p>"""
 
-    html = _wrap(content, preview=f"Your attendance for {course_name} on {date_fmt} has been confirmed.")
+    html = _wrap(content, f"Your attendance for {course_name} on {date_fmt} has been confirmed.")
     _send_async(email, f"Attendance Recorded — {course_name}", html)
