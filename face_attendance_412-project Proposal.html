@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FaceAttend — Automated Attendance System</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #05080f;
+    --surface: #0d1117;
+    --surface2: #161b22;
+    --accent: #00e5ff;
+    --accent2: #7c3aed;
+    --accent3: #10b981;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --border: rgba(255,255,255,0.08);
+    --glow: 0 0 40px rgba(0,229,255,0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── GRID BG ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 40px;
+    background: rgba(5,8,15,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1.2rem;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+    cursor: pointer;
+  }
+
+  .nav-logo span { color: var(--text); }
+
+  .nav-links {
+    display: flex;
+    gap: 8px;
+  }
+
+  .nav-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: var(--muted);
+    background: transparent;
+    border: 1px solid transparent;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
+  .nav-btn:hover, .nav-btn.active {
+    color: var(--accent);
+    border-color: rgba(0,229,255,0.3);
+    background: rgba(0,229,255,0.05);
+  }
+
+  /* ── PAGES ── */
+  .page {
+    display: none;
+    min-height: 100vh;
+    padding: 100px 40px 60px;
+    position: relative;
+    z-index: 1;
+    animation: fadeIn 0.4s ease;
+  }
+
+  .page.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  /* ── SECTION LABEL ── */
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  /* ── HEADINGS ── */
+  h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: clamp(2.4rem, 5vw, 4rem);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -1.5px;
+    margin-bottom: 24px;
+  }
+
+  h1 em {
+    font-style: normal;
+    color: var(--accent);
+  }
+
+  h2 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 1.6rem;
+    letter-spacing: -0.5px;
+    margin-bottom: 20px;
+  }
+
+  p {
+    color: var(--muted);
+    line-height: 1.75;
+    font-size: 0.97rem;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    padding: 120px 40px 80px;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0,229,255,0.08);
+    border: 1px solid rgba(0,229,255,0.2);
+    border-radius: 100px;
+    padding: 6px 16px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--accent);
+    letter-spacing: 1px;
+    margin-bottom: 32px;
+  }
+
+  .hero-badge .dot {
+    width: 6px; height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  .hero-desc {
+    font-size: 1.1rem;
+    max-width: 580px;
+    line-height: 1.7;
+    margin-bottom: 48px;
+  }
+
+  .hero-stats {
+    display: flex;
+    gap: 48px;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .stat-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 2rem;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .stat-num span { color: var(--accent); }
+
+  .stat-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* ── FEATURE CARDS (overview) ── */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 40px;
+  }
+
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .feature-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(0,229,255,0.04), transparent);
+    opacity: 0;
+    transition: opacity 0.25s;
+  }
+
+  .feature-card:hover {
+    border-color: rgba(0,229,255,0.3);
+    transform: translateY(-4px);
+    box-shadow: var(--glow);
+  }
+
+  .feature-card:hover::after { opacity: 1; }
+
+  .card-icon {
+    width: 44px; height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    margin-bottom: 18px;
+  }
+
+  .card-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 1.05rem;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+
+  .card-desc {
+    font-size: 0.88rem;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .card-arrow {
+    margin-top: 18px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--accent);
+    letter-spacing: 1px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    text-transform: uppercase;
+  }
+
+  .feature-card:hover .card-arrow { opacity: 1; }
+
+  /* ── DETAIL PAGES ── */
+  .detail-header {
+    margin-bottom: 48px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+    transition: color 0.2s;
+    padding: 0;
+  }
+
+  .back-btn:hover { color: var(--accent); }
+
+  /* ── INFO BLOCKS ── */
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 32px;
+  }
+
+  @media (max-width: 640px) {
+    .info-grid { grid-template-columns: 1fr; }
+    nav { padding: 14px 20px; }
+    .page { padding: 90px 20px 50px; }
+    .hero { padding: 100px 20px 60px; }
+    h1 { font-size: 2rem; }
+    .nav-links { gap: 4px; }
+    .nav-btn { padding: 5px 8px; font-size: 0.65rem; }
+    .hero-stats { gap: 28px; }
+  }
+
+  .info-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px;
+  }
+
+  .info-block h3 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+    color: var(--accent);
+  }
+
+  .info-block p, .info-block li {
+    font-size: 0.88rem;
+    color: var(--muted);
+    line-height: 1.65;
+  }
+
+  .info-block ul { padding-left: 18px; }
+  .info-block li { margin-bottom: 6px; }
+
+  /* ── STEPS ── */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 32px;
+  }
+
+  .step {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+  }
+
+  .step-num {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--border);
+    line-height: 1;
+    min-width: 36px;
+  }
+
+  .step-content h3 {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    margin-bottom: 8px;
+    font-size: 1rem;
+  }
+
+  .step-content p { font-size: 0.88rem; }
+
+  .step-content ul {
+    padding-left: 16px;
+    margin-top: 8px;
+  }
+
+  .step-content li {
+    font-size: 0.88rem;
+    color: var(--muted);
+    margin-bottom: 4px;
+    line-height: 1.6;
+  }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    overflow-x: auto;
+    margin-top: 28px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+
+  thead tr {
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  thead th {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    padding: 14px 18px;
+    text-align: left;
+    font-weight: 400;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+
+  tbody td {
+    padding: 13px 18px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  tbody td:first-child { color: var(--text); font-weight: 500; }
+
+  /* ── CHALLENGES ── */
+  .challenge-list {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 28px;
+  }
+
+  .challenge-item {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+
+  .challenge-icon {
+    font-size: 1.2rem;
+    min-width: 24px;
+    margin-top: 1px;
+  }
+
+  .challenge-item strong {
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--text);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .challenge-item p { font-size: 0.85rem; }
+
+  /* ── TECH BADGES ── */
+  .tech-section { margin-top: 32px; }
+
+  .tech-layer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+  }
+
+  .tech-layer-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+    min-width: 80px;
+    padding-top: 2px;
+  }
+
+  .tech-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tech-badge {
+    background: rgba(0,229,255,0.07);
+    border: 1px solid rgba(0,229,255,0.15);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--accent);
+  }
+
+  .tech-badge.purple {
+    background: rgba(124,58,237,0.07);
+    border-color: rgba(124,58,237,0.2);
+    color: #a78bfa;
+  }
+
+  .tech-badge.green {
+    background: rgba(16,185,129,0.07);
+    border-color: rgba(16,185,129,0.2);
+    color: var(--accent3);
+  }
+
+  .tech-desc {
+    font-size: 0.82rem;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── FREE BANNER ── */
+  .free-banner {
+    margin-top: 40px;
+    background: linear-gradient(135deg, rgba(16,185,129,0.08), rgba(0,229,255,0.05));
+    border: 1px solid rgba(16,185,129,0.2);
+    border-radius: 14px;
+    padding: 20px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .free-banner .icon { font-size: 1.5rem; }
+
+  .free-banner p {
+    font-size: 0.88rem;
+    color: var(--accent3);
+  }
+
+  /* ── OVERVIEW PROBLEM SECTION ── */
+  .problem-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  @media (max-width: 640px) {
+    .problem-list { grid-template-columns: 1fr; }
+    .info-grid { grid-template-columns: 1fr; }
+    .feature-grid { grid-template-columns: 1fr; }
+    .hero-stats { gap: 24px; }
+  }
+
+  .problem-item {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid #ef4444;
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 0.88rem;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .solution-item {
+    border-left-color: var(--accent3);
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 40px 0;
+  }
+
+  /* pill tag */
+  .tag {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 3px 12px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--muted);
+    letter-spacing: 0.5px;
+    margin-right: 6px;
+    margin-bottom: 6px;
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo" onclick="showPage('home')">Face<span>Attend</span></div>
+  <div class="nav-links">
+    <button class="nav-btn active" onclick="showPage('home')">Overview</button>
+    <button class="nav-btn" onclick="showPage('how')">How It Works</button>
+    <button class="nav-btn" onclick="showPage('features')">Features</button>
+    <button class="nav-btn" onclick="showPage('tech')">Tech Stack</button>
+    <button class="nav-btn" onclick="showPage('challenges')">Challenges</button>
+  </div>
+</nav>
+
+<!-- ══════════════ HOME ══════════════ -->
+<div id="page-home" class="page active hero">
+  <div class="container">
+    <div class="hero-badge"><div class="dot"></div> University Project · Mobile Application</div>
+    <h1>Automated <em>Face Recognition</em> Attendance System</h1>
+    <p class="hero-desc">
+      One photo. Zero manual work. The teacher points their phone at the class — the system figures out who's present automatically.
+    </p>
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="stat-num">1<span>×</span></div>
+        <div class="stat-label">Enrollment per student</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">0<span>s</span></div>
+        <div class="stat-label">Manual name-calling</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num">100<span>%</span></div>
+        <div class="stat-label">Free & open source</div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-label">The Problem</div>
+    <h2>Traditional attendance is broken</h2>
+    <div class="problem-list">
+      <div class="problem-item">⏳ Time wasted calling names or passing sheets — eats into class time</div>
+      <div class="problem-item">🕵️ Proxy attendance — students mark absent friends as present</div>
+      <div class="problem-item">📄 Lost or messy paper records — hard to track or share</div>
+      <div class="problem-item">📊 No easy way to see attendance trends or reports</div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-label">Explore the Project</div>
+    <h2>What's inside</h2>
+    <div class="feature-grid">
+      <div class="feature-card" onclick="showPage('how')">
+        <div class="card-icon" style="background:rgba(0,229,255,0.1)">📸</div>
+        <div class="card-title">How It Works</div>
+        <div class="card-desc">Two simple steps — one-time enrollment, then automatic daily attendance with a single photo.</div>
+        <div class="card-arrow">Explore →</div>
+      </div>
+      <div class="feature-card" onclick="showPage('features')">
+        <div class="card-icon" style="background:rgba(124,58,237,0.1)">⚙️</div>
+        <div class="card-title">All Features</div>
+        <div class="card-desc">Enrollment, attendance scan, reports, charts, manual override, secure login, and course management.</div>
+        <div class="card-arrow">Explore →</div>
+      </div>
+      <div class="feature-card" onclick="showPage('tech')">
+        <div class="card-icon" style="background:rgba(16,185,129,0.1)">🔧</div>
+        <div class="card-title">Tech Stack</div>
+        <div class="card-desc">Flutter, FastAPI, InsightFace, OpenCV, Supabase — all free and open source, no billing required.</div>
+        <div class="card-arrow">Explore →</div>
+      </div>
+      <div class="feature-card" onclick="showPage('challenges')">
+        <div class="card-icon" style="background:rgba(239,68,68,0.1)">⚡</div>
+        <div class="card-title">Challenges & Solutions</div>
+        <div class="card-desc">Multiple faces, lighting variation, hidden faces, far-away students — all handled gracefully.</div>
+        <div class="card-arrow">Explore →</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ HOW IT WORKS ══════════════ -->
+<div id="page-how" class="page">
+  <div class="container">
+    <button class="back-btn" onclick="showPage('home')">← Back</button>
+    <div class="detail-header">
+      <div class="section-label">Process</div>
+      <h1>How It <em>Works</em></h1>
+      <p>Two phases — enrollment happens once. Attendance happens every class.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div class="step-content">
+          <h3>One-Time Student Enrollment</h3>
+          <p>Done at the beginning of the semester. Never repeated again.</p>
+          <ul>
+            <li>Student opens the app and logs in with their student ID</li>
+            <li>App guides them to scan their face from multiple angles</li>
+            <li>System saves a unique digital face profile in the cloud</li>
+            <li>Takes under 1 minute total</li>
+          </ul>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div class="step-content">
+          <h3>Taking Attendance (Every Class)</h3>
+          <p>Fully automatic — teacher just takes one photo.</p>
+          <ul>
+            <li>Teacher opens app, selects the course and date</li>
+            <li>Points phone camera at the classroom, captures one photo</li>
+            <li>System automatically detects and identifies all visible faces</li>
+            <li>Attendance marked instantly — present or absent with confidence score</li>
+            <li>Teacher reviews and can manually fix any mistakes</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-label">Input & Output</div>
+    <h2>Data Flow</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Input</th>
+            <th>Output</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Student face (multi-angle scan)</td><td>Stored face profile in cloud database</td></tr>
+          <tr><td>Classroom photo (one shot)</td><td>List of present/absent students with confidence score</td></tr>
+          <tr><td>Course + date selection</td><td>Attendance session created and saved automatically</td></tr>
+          <tr><td>Teacher login credentials</td><td>Secure access with JWT token</td></tr>
+          <tr><td>Manual correction by teacher</td><td>Updated attendance record in real time</td></tr>
+          <tr><td>Attendance data over time</td><td>Charts showing attendance % per student</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ FEATURES ══════════════ -->
+<div id="page-features" class="page">
+  <div class="container">
+    <button class="back-btn" onclick="showPage('home')">← Back</button>
+    <div class="detail-header">
+      <div class="section-label">Application Modules</div>
+      <h1>All <em>Features</em></h1>
+      <p>Seven core modules that cover the full attendance workflow — from enrollment to reporting.</p>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-block">
+        <h3>📷 Student Enrollment</h3>
+        <p>One-time face scan per student. Captures multiple angles to build a robust face profile stored securely in the cloud. Never repeated after initial setup.</p>
+      </div>
+      <div class="info-block">
+        <h3>🎯 Attendance Scan</h3>
+        <p>Teacher captures a single photo of the entire class. InsightFace processes all faces in one pass and auto-marks present and absent students instantly.</p>
+      </div>
+      <div class="info-block">
+        <h3>📋 Attendance Records</h3>
+        <p>Full history browsable by student, course, or date. Every session is logged digitally — no lost papers, no messy sheets.</p>
+      </div>
+      <div class="info-block">
+        <h3>📊 Reports & Charts</h3>
+        <p>Visual attendance percentage per student. Pie and bar charts for quick insights. Identify students at risk of falling below the attendance threshold.</p>
+      </div>
+      <div class="info-block">
+        <h3>✏️ Manual Override</h3>
+        <p>Teacher can correct any wrong or missed detection after the scan. Changes are reflected in real time in the database.</p>
+      </div>
+      <div class="info-block">
+        <h3>🔐 Secure Login</h3>
+        <p>JWT-based authentication for both teachers and students. Passwords hashed with bcrypt. Role-based access — teachers and students see different views.</p>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-label">Full Feature Table</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Module</th><th>What It Does</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Student Enrollment</td><td>One-time face scan; creates unique face profile per student</td></tr>
+          <tr><td>Attendance Scan</td><td>Teacher captures class photo; system auto-marks attendance</td></tr>
+          <tr><td>Attendance Records</td><td>View full history by student, course, or date</td></tr>
+          <tr><td>Reports & Charts</td><td>Attendance % per student; visual pie/bar charts</td></tr>
+          <tr><td>Manual Override</td><td>Teacher can correct any wrong or missed detection</td></tr>
+          <tr><td>Secure Login</td><td>JWT-based login for both teachers and students</td></tr>
+          <tr><td>Course Management</td><td>Create courses, assign students to each section</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ TECH STACK ══════════════ -->
+<div id="page-tech" class="page">
+  <div class="container">
+    <button class="back-btn" onclick="showPage('home')">← Back</button>
+    <div class="detail-header">
+      <div class="section-label">Technology</div>
+      <h1>The <em>Tech Stack</em></h1>
+      <p>Every tool is free and open source. No paid subscriptions. No cloud billing. No credit card required.</p>
+    </div>
+
+    <div class="tech-section">
+      <div class="tech-layer">
+        <div class="tech-layer-label">Mobile</div>
+        <div>
+          <div class="tech-items">
+            <div class="tech-badge">Flutter (Dart)</div>
+          </div>
+          <div class="tech-desc" style="margin-top:8px">Android & iOS app — handles camera, UI, and all API calls</div>
+        </div>
+      </div>
+      <div class="tech-layer">
+        <div class="tech-layer-label">Backend</div>
+        <div>
+          <div class="tech-items">
+            <div class="tech-badge purple">Python</div>
+            <div class="tech-badge purple">FastAPI</div>
+          </div>
+          <div class="tech-desc" style="margin-top:8px">Handles image processing, business logic, and all API endpoints</div>
+        </div>
+      </div>
+      <div class="tech-layer">
+        <div class="tech-layer-label">AI / Vision</div>
+        <div>
+          <div class="tech-items">
+            <div class="tech-badge">InsightFace (ArcFace)</div>
+            <div class="tech-badge">OpenCV</div>
+          </div>
+          <div class="tech-desc" style="margin-top:8px">Detects and compares faces; OpenCV preprocesses images before recognition</div>
+        </div>
+      </div>
+      <div class="tech-layer">
+        <div class="tech-layer-label">Database</div>
+        <div>
+          <div class="tech-items">
+            <div class="tech-badge green">Supabase (PostgreSQL)</div>
+            <div class="tech-badge green">Supabase Storage</div>
+          </div>
+          <div class="tech-desc" style="margin-top:8px">Stores student records and attendance logs; photo storage up to 1 GB free</div>
+        </div>
+      </div>
+      <div class="tech-layer">
+        <div class="tech-layer-label">Hosting</div>
+        <div>
+          <div class="tech-items">
+            <div class="tech-badge green">Render.com</div>
+          </div>
+          <div class="tech-desc" style="margin-top:8px">Hosts the FastAPI server — free tier, no credit card needed</div>
+        </div>
+      </div>
+      <div class="tech-layer">
+        <div class="tech-layer-label">Auth</div>
+        <div>
+          <div class="tech-items">
+            <div class="tech-badge purple">JWT</div>
+            <div class="tech-badge purple">bcrypt</div>
+          </div>
+          <div class="tech-desc" style="margin-top:8px">Secure login and session management for teachers and students</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="free-banner">
+      <div class="icon">✅</div>
+      <p>All technologies used in this project are 100% free and open source. No paid subscriptions or cloud billing required.</p>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-label">Full Stack Table</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Layer</th><th>Technology</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Mobile App</td><td>Flutter (Dart)</td><td>Android/iOS app — camera, UI, API calls</td></tr>
+          <tr><td>Backend API</td><td>Python + FastAPI</td><td>Handles image processing and all logic</td></tr>
+          <tr><td>Face Recognition</td><td>InsightFace (ArcFace)</td><td>Detects faces and compares them to stored profiles</td></tr>
+          <tr><td>Image Processing</td><td>OpenCV</td><td>Preprocessing photos before recognition</td></tr>
+          <tr><td>Cloud Database</td><td>Supabase (PostgreSQL)</td><td>Stores student records and attendance logs</td></tr>
+          <tr><td>Photo Storage</td><td>Supabase Storage</td><td>Stores enrollment photos (1 GB free)</td></tr>
+          <tr><td>Backend Hosting</td><td>Render.com</td><td>Hosts the FastAPI server (free tier, no card)</td></tr>
+          <tr><td>Authentication</td><td>JWT + bcrypt</td><td>Secure login for teachers and students</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ CHALLENGES ══════════════ -->
+<div id="page-challenges" class="page">
+  <div class="container">
+    <button class="back-btn" onclick="showPage('home')">← Back</button>
+    <div class="detail-header">
+      <div class="section-label">Known Challenges</div>
+      <h1>Problems &amp; <em>Solutions</em></h1>
+      <p>Every real-world obstacle identified and handled — the system is designed to be robust from day one.</p>
+    </div>
+
+    <div class="challenge-list">
+      <div class="challenge-item">
+        <div class="challenge-icon">👥</div>
+        <div>
+          <strong>Multiple faces in one photo</strong>
+          <p>InsightFace processes all faces in a single pass — no separate scan per student needed, no matter how crowded the classroom.</p>
+        </div>
+      </div>
+      <div class="challenge-item">
+        <div class="challenge-icon">💡</div>
+        <div>
+          <strong>Lighting &amp; angle variation</strong>
+          <p>Multi-angle enrollment makes the face profile robust to different lighting conditions and camera angles encountered in real classrooms.</p>
+        </div>
+      </div>
+      <div class="challenge-item">
+        <div class="challenge-icon">🙈</div>
+        <div>
+          <strong>Partially hidden faces</strong>
+          <p>Faces that can't be confidently identified are flagged as unrecognized. The teacher uses the manual override to correct these cases.</p>
+        </div>
+      </div>
+      <div class="challenge-item">
+        <div class="challenge-icon">📏</div>
+        <div>
+          <strong>Far-away students</strong>
+          <p>The app recommends an optimal camera distance before the teacher captures the photo — ensuring all students are within recognizable range.</p>
+        </div>
+      </div>
+      <div class="challenge-item">
+        <div class="challenge-icon">🌐</div>
+        <div>
+          <strong>Server cold start on free tier</strong>
+          <p>The app pings the Render.com server before class begins to wake it up, ensuring there's no delay when attendance is actually taken.</p>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <div class="section-label">Design Philosophy</div>
+    <h2>Built for the real world</h2>
+    <div class="info-grid">
+      <div class="info-block">
+        <h3>🔁 Graceful Degradation</h3>
+        <p>When automatic recognition fails, the system falls back to manual override — teachers always have the final say. No attendance is ever lost.</p>
+      </div>
+      <div class="info-block">
+        <h3>🛡️ Tamper-Proof Records</h3>
+        <p>Digital records stored in PostgreSQL with JWT-protected API endpoints. Proxy attendance becomes impossible — the camera sees the truth.</p>
+      </div>
+      <div class="info-block">
+        <h3>⚡ Performance First</h3>
+        <p>InsightFace runs a single inference pass for the whole class photo — not one per student. Fast enough for real-time classroom use.</p>
+      </div>
+      <div class="info-block">
+        <h3>💸 Zero Cost</h3>
+        <p>Every component runs on a free tier. The system is fully deployable with no budget — ideal for university projects and pilot programs.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showPage(id) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+
+    document.getElementById('page-' + id).classList.add('active');
+
+    const map = { home: 0, how: 1, features: 2, tech: 3, challenges: 4 };
+    const btns = document.querySelectorAll('.nav-btn');
+    if (map[id] !== undefined) btns[map[id]].classList.add('active');
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+</body>
+</html>
