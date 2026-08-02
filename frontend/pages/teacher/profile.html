@@ -31,14 +31,6 @@
       </div>
     </div>
 
-    <!-- Assigned Courses Section -->
-    <div class="card mb-2" style="margin-top:1.5rem;">
-      <h3 style="margin-bottom:1rem;"><i data-lucide="book-open"></i> Assigned Courses</h3>
-      <div id="teacherCourseList" class="courses-grid">
-        <div class="text-muted">Loading courses…</div>
-      </div>
-    </div>
-
     <div class="card">
       <h3 style="margin-bottom:1.5rem"><i data-lucide="edit-3"></i> Edit Profile</h3>
       <form id="profileForm">
@@ -75,21 +67,6 @@
     document.getElementById("profileCourses").textContent  = p.total_courses;
     document.getElementById("editName").value  = p.username;
     document.getElementById("editPhone").value = p.phone || "";
-
-    const courseListEl = document.getElementById("teacherCourseList");
-    if (!p.courses || !p.courses.length) {
-      courseListEl.innerHTML = `<p class="text-muted">No courses assigned yet.</p>`;
-    } else {
-      courseListEl.innerHTML = p.courses.map(c => `
-        <div class="course-card" onclick="window.location.href='course.html?id=${c.id}'">
-          <div class="course-name" style="font-weight:700;">${c.name}</div>
-          <div class="course-meta" style="margin-top:0.5rem;">
-            <span><i data-lucide="users"></i> ${c.enrolled} Enrolled Students</span>
-          </div>
-        </div>
-      `).join("");
-      if (window.lucide) lucide.createIcons();
-    }
   }
 
   document.getElementById("profileForm").addEventListener("submit", async (e) => {

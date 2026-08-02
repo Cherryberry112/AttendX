@@ -212,8 +212,8 @@
         </div>
         <div class="table-wrapper">
           <table>
-            <thead><tr><th>Date</th><th>Present</th><th>Total</th><th>Rate</th></tr></thead>
-            <tbody id="historyTable"><tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Present</th><th>Total</th><th>Rate</th><th style="text-align:right;">Export Day Session</th></tr></thead>
+            <tbody id="historyTable"><tr><td colspan="5" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -278,6 +278,7 @@
       document.getElementById("courseSubtitle").textContent = `${data.course.code || ''} · ${data.students.length} students`;
       renderHistory(data.sessions);
       renderStudents(data.students);
+      loadMatrix();
       data.students.forEach(s => {
         draftRecords[s.id] = {
           username: s.username,
@@ -297,17 +298,25 @@
   function renderHistory(sessions) {
     const tbody = document.getElementById("historyTable");
     if (!sessions || !sessions.length) {
-      tbody.innerHTML = `<tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">No classes yet.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="text-muted" style="text-align:center;padding:1.5rem">No classes yet.</td></tr>`;
       return;
     }
     tbody.innerHTML = sessions.map(s => {
       const rate = s.total ? Math.round(s.present / s.total * 100) : 0;
       const cls  = rate >= 75 ? "badge-success" : rate >= 50 ? "badge-warning" : "badge-danger";
       return `<tr>
-        <td>${fmtDate(s.date)}</td><td>${s.present}</td><td>${s.total}</td>
+        <td>${fmtDate(s.date)}</td>
+        <td>${s.present}</td>
+        <td>${s.total}</td>
         <td><span class="badge ${cls}">${rate}%</span></td>
+        <td style="text-align:right;">
+          <button class="btn btn-outline btn-sm" onclick="exportDaySessionCSV('${s.date}')">
+            <i data-lucide="download"></i> Export Session CSV
+          </button>
+        </td>
       </tr>`;
     }).join("");
+    if (window.lucide) lucide.createIcons();
   }
 
   function renderStudents(students) {
@@ -650,6 +659,33 @@
       const courseName = (data.course.name || `Course_${courseId}`).replace(/\s+/g, '_');
       exportToCSV(`${courseName}_Attendance_Matrix.csv`, headers, rows);
       showToast(`Exported attendance matrix for ${courseName}`, "success");
+    } catch (err) {
+      showToast("Export failed: " + err.message, "error");
+    }
+  }
+
+  async function exportDaySessionCSV(dateStr) {
+    try {
+      if (!cachedMatrix) {
+        cachedMatrix = await api.get(`/teacher/courses/${courseId}/matrix`);
+      }
+      const data = cachedMatrix;
+      if (!data || !data.students.length) {
+        showToast("No attendance data available for this session", "warning");
+        return;
+      }
+      const headers = ["Student Name", "Student ID", "Email", "Session Date", "Status"];
+      const rows = data.students.map(s => [
+        s.username,
+        s.student_id,
+        s.email || "",
+        dateStr,
+        s.attendance[dateStr] === "P" ? "Present" : "Absent"
+      ]);
+
+      const courseName = (data.course.name || `Course_${courseId}`).replace(/\s+/g, '_');
+      exportToCSV(`${courseName}_Session_${dateStr}.csv`, headers, rows);
+      showToast(`Exported attendance for session ${dateStr}`, "success");
     } catch (err) {
       showToast("Export failed: " + err.message, "error");
     }

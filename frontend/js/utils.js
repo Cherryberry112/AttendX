@@ -405,16 +405,21 @@ const api = {
     let res;
     try {
       res = await fetch(url, opts);
-      if (res.status === 503 || res.status === 502) throw new Error("Server is warming up. Please try again in 10 seconds.");
+      if (res.status === 503 || res.status === 502) {
+        throw new Error("Server is warming up on Render free tier. Please try again in 10 seconds.");
+      }
     } catch (err) {
-      throw new Error(err.message === "Server is warming up. Please try again in 10 seconds." ? err.message : "Server error or network timeout. Please retry in a few seconds.");
+      if (err.message && err.message.includes("warming up")) {
+        throw err;
+      }
+      throw new Error(`Network error connecting to API: ${err.message || "Failed to fetch"}`);
     }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (res.status === 401) {
         Auth.clear();
       }
-      throw new Error(data.error || `HTTP ${res.status}`);
+      throw new Error(data.error || `Server HTTP Error ${res.status}`);
     }
     return data;
   },
