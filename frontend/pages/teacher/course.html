@@ -201,29 +201,29 @@
     <!-- ── History Tab ─────────────────────────────────────────── -->
     <div id="panel-history" class="hidden">
       <div class="card" style="margin-bottom:1.5rem;">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
-          <div>
-            <h3>Session History</h3>
-            <p class="text-muted" style="font-size:0.85rem;">Summary of classes held and attendance rates.</p>
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="exportCourseMatrixCSV()">
-            <i data-lucide="file-spreadsheet"></i> Export Full Attendance Matrix (CSV/Excel)
-          </button>
+        <div style="margin-bottom:1rem;">
+          <h3>Session History</h3>
+          <p class="text-muted" style="font-size:0.85rem;">Summary of classes held and attendance rates.</p>
         </div>
         <div class="table-wrapper">
           <table>
-            <thead><tr><th>Date</th><th>Present</th><th>Total</th><th>Rate</th><th style="text-align:right;">Export Day Session</th></tr></thead>
-            <tbody id="historyTable"><tr><td colspan="5" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Present</th><th>Total</th><th>Rate</th></tr></thead>
+            <tbody id="historyTable"><tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
 
       <!-- Matrix Grid View -->
       <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
           <div>
             <h3>Student-by-Day Attendance Record (P / A)</h3>
             <p class="text-muted" style="font-size:0.85rem;">Full student record across all class days.</p>
+          </div>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" onclick="exportCourseMatrixCSV()"><i data-lucide="download"></i> Export CSV</button>
+            <button class="btn btn-outline btn-sm" onclick="exportCourseMatrixCSV()"><i data-lucide="file-spreadsheet"></i> Export Excel</button>
+            <button class="btn btn-outline btn-sm" onclick="printCourseMatrixPDF()"><i data-lucide="printer"></i> Export PDF / Print</button>
           </div>
         </div>
         <div class="table-wrapper" style="max-height:420px; overflow-y:auto;">
@@ -232,7 +232,7 @@
               <tr><th>Student Name</th><th>Student ID</th><th>Status</th></tr>
             </thead>
             <tbody id="matrixBody">
-              <tr><td colspan="3" class="text-muted" style="text-align:center;padding:1.5rem">Click Export or switch tabs to load matrix...</td></tr>
+              <tr><td colspan="3" class="text-muted" style="text-align:center;padding:1.5rem">Loading attendance record...</td></tr>
             </tbody>
           </table>
         </div>
@@ -298,7 +298,7 @@
   function renderHistory(sessions) {
     const tbody = document.getElementById("historyTable");
     if (!sessions || !sessions.length) {
-      tbody.innerHTML = `<tr><td colspan="5" class="text-muted" style="text-align:center;padding:1.5rem">No classes yet.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">No classes yet.</td></tr>`;
       return;
     }
     tbody.innerHTML = sessions.map(s => {
@@ -309,14 +309,8 @@
         <td>${s.present}</td>
         <td>${s.total}</td>
         <td><span class="badge ${cls}">${rate}%</span></td>
-        <td style="text-align:right;">
-          <button class="btn btn-outline btn-sm" onclick="exportDaySessionCSV('${s.date}')">
-            <i data-lucide="download"></i> Export Session CSV
-          </button>
-        </td>
       </tr>`;
     }).join("");
-    if (window.lucide) lucide.createIcons();
   }
 
   function renderStudents(students) {
@@ -664,30 +658,29 @@
     }
   }
 
-  async function exportDaySessionCSV(dateStr) {
-    try {
-      if (!cachedMatrix) {
-        cachedMatrix = await api.get(`/teacher/courses/${courseId}/matrix`);
-      }
-      const data = cachedMatrix;
-      if (!data || !data.students.length) {
-        showToast("No attendance data available for this session", "warning");
-        return;
-      }
-      const headers = ["Student Name", "Student ID", "Email", "Session Date", "Status"];
-      const rows = data.students.map(s => [
-        s.username,
-        s.student_id,
-        s.email || "",
-        dateStr,
-        s.attendance[dateStr] === "P" ? "Present" : "Absent"
-      ]);
-
-      const courseName = (data.course.name || `Course_${courseId}`).replace(/\s+/g, '_');
-      exportToCSV(`${courseName}_Session_${dateStr}.csv`, headers, rows);
-      showToast(`Exported attendance for session ${dateStr}`, "success");
-    } catch (err) {
-      showToast("Export failed: " + err.message, "error");
+  function printCourseMatrixPDF() {
+    if (!cachedMatrix || !cachedMatrix.students.length) {
+      showToast("No matrix data to print", "warning");
+      return;
+    }
+    const data = cachedMatrix;
+    const dates = data.dates || [];
+    const headers = ["Student Name", "Student ID", "Email", ...dates, "Attended", "Total", "%"];
+    const rows = data.students.map(s => [
+      s.username,
+      s.student_id,
+      s.email || "",
+      ...dates.map(d => s.attendance[d] || "A"),
+      s.total_attended,
+      s.total_sessions,
+      `${s.percentage}%`
+    ]);
+    const title = `${data.course.name || 'Course'} - Student Attendance Record`;
+    const summary = `Class Dates: ${dates.join(', ') || 'None'} | Total Students: ${data.students.length}`;
+    if (typeof window.printReport === "function") {
+      window.printReport(title, summary, headers, rows);
+    } else {
+      window.print();
     }
   }
 
