@@ -90,6 +90,7 @@
 .glow-brand {
   background: linear-gradient(135deg, #7b2cbf 0%, #ec4899 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   filter: drop-shadow(0 0 20px rgba(236, 72, 153, 0.35));
 }

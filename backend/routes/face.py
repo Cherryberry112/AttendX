@@ -52,7 +52,7 @@ def enroll():
                 frame_b64 += "=" * (4 - missing_padding)
 
             img_bytes = base64.b64decode(frame_b64)
-            embedding = detect_and_embed(img_bytes)
+            embedding = detect_and_embed(img_bytes, require_single_face=True)
 
             if embedding is not None:
                 embeddings.append(embedding)
@@ -73,6 +73,47 @@ def enroll():
                 "Please retry in a brighter area and keep your face within the oval."
             )
         }), 422
+
+    # ── H3: Outlier rejection before averaging ───────────────────────────────
+    # Compute pairwise cosine similarity; drop embeddings whose average
+    # similarity to the rest falls below the threshold.
+    _OUTLIER_THRESHOLD = 0.55
+    if len(embeddings) > 3:
+        emb_stack = np.array(embeddings)  # shape (N, 512)
+        # Normalize rows (should already be normalized, but be safe)
+        norms = np.linalg.norm(emb_stack, axis=1, keepdims=True) + 1e-9
+        emb_normed = emb_stack / norms
+        # Pairwise cosine similarity matrix
+        sim_matrix = emb_normed @ emb_normed.T  # (N, N)
+        n = len(embeddings)
+        avg_sims = []
+        for i in range(n):
+            # Average similarity to all OTHER embeddings
+            others = [sim_matrix[i][j] for j in range(n) if j != i]
+            avg_sims.append(float(np.mean(others)))
+
+        # Keep only embeddings above the threshold
+        kept = []
+        dropped_indices = []
+        for i, (emb, avg_sim) in enumerate(zip(embeddings, avg_sims)):
+            if avg_sim >= _OUTLIER_THRESHOLD:
+                kept.append(emb)
+            else:
+                dropped_indices.append(i)
+                print(f"[INFO] Outlier embedding dropped (index={i}, avg_sim={avg_sim:.3f})")
+
+        if len(kept) < 3:
+            return jsonify({
+                "error": (
+                    f"Too many inconsistent frames — only {len(kept)} of "
+                    f"{len(embeddings)} passed consistency check. "
+                    "Please retry with a steadier head position and good lighting."
+                )
+            }), 422
+
+        print(f"[INFO] Outlier rejection: kept {len(kept)}/{len(embeddings)} embeddings "
+              f"(dropped indices: {dropped_indices})")
+        embeddings = kept
 
     # Average and re-normalize
     master = np.mean(embeddings, axis=0).astype(np.float32)

@@ -4,56 +4,27 @@ face_matcher.py
 Detect all faces in a frame and match against enrolled student embeddings
 using the same HOG+LBP pipeline as face_detector.py.
 Works on any server (no InsightFace needed).
+
+Uses shared detection/alignment/embedding functions from face_detector.py
+(M1 — single source of truth, no duplicated detectMultiScale).
 """
 import cv2
 import numpy as np
-from ml.face_detector import _get_cascades, _combine_embeddings, INSIGHTFACE_AVAILABLE
+from ml.face_detector import (
+    detect_faces,
+    _align_face,
+    _combine_embeddings,
+    _get_insightface_app,
+    INSIGHTFACE_AVAILABLE,
+)
+
+# ── Max frame width for scan performance (M2) ────────────────────────────────
+_MAX_SCAN_WIDTH = 640
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     denom = (np.linalg.norm(a) * np.linalg.norm(b)) + 1e-9
     return float(np.dot(a, b) / denom)
-
-
-def _detect_all_faces(img: np.ndarray) -> list[tuple]:
-    """
-    Detect all faces in an image.
-    Returns list of (x, y, w, h) bounding boxes.
-    Falls back to center-oval region if nothing detected.
-    """
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    enhanced = cv2.equalizeHist(gray)
-
-    face_cascade, _ = _get_cascades()
-    boxes = []
-
-    if face_cascade is not None and not face_cascade.empty():
-        for scale, neighbors, min_sz in [
-            (1.05, 3, (50, 50)),
-            (1.1,  4, (40, 40)),
-            (1.15, 3, (30, 30)),
-        ]:
-            faces = face_cascade.detectMultiScale(
-                enhanced,
-                scaleFactor=scale,
-                minNeighbors=neighbors,
-                minSize=min_sz,
-                flags=cv2.CASCADE_SCALE_IMAGE,
-            )
-            if len(faces) > 0:
-                boxes = list(faces)
-                break
-
-    if not boxes:
-        h, w = gray.shape
-        cx, cy = w // 2, h // 2
-        fw, fh = int(w * 0.42), int(h * 0.55)
-        x0 = max(0, cx - fw // 2)
-        y0 = max(0, cy - fh // 2)
-        boxes = [(x0, y0, fw, fh)]
-        print("[INFO] scan: no faces detected — using center-oval fallback")
-
-    return boxes
 
 
 def find_match(img_bytes: bytes, enrolled: list[dict], threshold: float = 0.35) -> list[dict]:
@@ -70,11 +41,21 @@ def find_match(img_bytes: bytes, enrolled: list[dict], threshold: float = 0.35) 
     Returns
     -------
     List of match dicts: { student_id, sid, name, confidence, bbox }
+    Returns [] if no faces detected (C1 — no fallback).
     """
     nparr = np.frombuffer(img_bytes, np.uint8)
     img   = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
         return []
+
+    # ── M2: Downscale for performance ─────────────────────────────────────────
+    h_orig, w_orig = img.shape[:2]
+    if w_orig > _MAX_SCAN_WIDTH:
+        scale = _MAX_SCAN_WIDTH / w_orig
+        new_w = _MAX_SCAN_WIDTH
+        new_h = int(h_orig * scale)
+        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        print(f"[INFO] scan: downscaled {w_orig}x{h_orig} → {new_w}x{new_h}")
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     brightness = float(np.mean(gray))
@@ -87,7 +68,6 @@ def find_match(img_bytes: bytes, enrolled: list[dict], threshold: float = 0.35) 
     # ── Try InsightFace if available ──────────────────────────────────────────
     if INSIGHTFACE_AVAILABLE:
         try:
-            from ml.face_detector import _get_insightface_app
             app = _get_insightface_app()
             if app is not None:
                 faces = app.get(img)
@@ -96,14 +76,19 @@ def find_match(img_bytes: bytes, enrolled: list[dict], threshold: float = 0.35) 
                     emb  = face.embedding.astype(np.float32)
                     emb  = emb / (np.linalg.norm(emb) + 1e-9)
                     bbox = [int(x) for x in face.bbox.tolist()]
-                    best_score, best_student = _best_match(emb, enrolled)
-                    results.append(_make_result(best_student, best_score, bbox, threshold))
+                    best_score, second_best_score, best_student = _best_match(emb, enrolled)
+                    results.append(_make_result(best_student, best_score, second_best_score, bbox, threshold))
                 return results
         except Exception as e:
             print(f"[WARNING] InsightFace scan failed: {e}")
 
-    # ── OpenCV HOG+LBP matching ───────────────────────────────────────────────
-    boxes   = _detect_all_faces(img)
+    # ── OpenCV HOG+LBP matching (uses shared detect_faces — M1) ──────────────
+    boxes = detect_faces(gray)
+
+    # C1: No fallback — if no faces detected, return empty list
+    if not boxes:
+        return []
+
     results = []
 
     for (x, y, w, h) in boxes:
@@ -114,31 +99,60 @@ def find_match(img_bytes: bytes, enrolled: list[dict], threshold: float = 0.35) 
         if face_crop.size == 0:
             continue
 
+        # H2: Apply same eye-based alignment as enrollment
+        face_crop = _align_face(face_crop)
+
         emb = _combine_embeddings(face_crop)
         if emb is None:
             continue
 
         bbox = [int(x), int(y), int(x + w), int(y + h)]
-        best_score, best_student = _best_match(emb, enrolled)
-        results.append(_make_result(best_student, best_score, bbox, threshold))
-        print(f"[INFO] scan match: best_score={best_score:.3f} threshold={threshold} student={best_student['name'] if best_student else None}")
+        best_score, second_best_score, best_student = _best_match(emb, enrolled)
+        results.append(_make_result(best_student, best_score, second_best_score, bbox, threshold))
+        print(f"[INFO] scan match: best={best_score:.3f} 2nd={second_best_score:.3f} "
+              f"margin={best_score - second_best_score:.3f} threshold={threshold} "
+              f"student={best_student['name'] if best_student else None}")
 
     return results
 
 
 def _best_match(emb: np.ndarray, enrolled: list[dict]) -> tuple:
-    best_score   = -1.0
-    best_student = None
+    """
+    Find the best and second-best matching student for an embedding.
+    Returns (best_score, second_best_score, best_student).
+    H4: Both scores needed for confidence margin check.
+    """
+    best_score        = -1.0
+    second_best_score = -1.0
+    best_student      = None
+
     for s in enrolled:
         score = cosine_similarity(emb, s["embedding"])
         if score > best_score:
-            best_score   = score
-            best_student = s
-    return best_score, best_student
+            second_best_score = best_score
+            best_score        = score
+            best_student      = s
+        elif score > second_best_score:
+            second_best_score = score
+
+    return best_score, second_best_score, best_student
 
 
-def _make_result(best_student, best_score: float, bbox: list, threshold: float) -> dict:
-    if best_student and best_score >= threshold:
+# ── H4: Confidence margin on match decisions ─────────────────────────────────
+_MARGIN_THRESHOLD = 0.05
+
+
+def _make_result(best_student, best_score: float, second_best_score: float,
+                 bbox: list, threshold: float) -> dict:
+    """
+    Produce a match result dict. A match is accepted only if:
+      1. best_score >= threshold, AND
+      2. (best_score - second_best_score) >= _MARGIN_THRESHOLD
+    This prevents near-tie scores from producing false confident matches.
+    """
+    margin = best_score - second_best_score
+
+    if best_student and best_score >= threshold and margin >= _MARGIN_THRESHOLD:
         return {
             "student_id": best_student["student_id"],
             "sid":        best_student["sid"],
