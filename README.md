@@ -1,4 +1,4 @@
-# AttendX — AI-Powered Biometric Attendance & Classroom Management System
+# AttendX AI-Powered Biometric Attendance & Classroom Management System
 ## Complete Project Report & Technical Overview
 
 ---
@@ -6,7 +6,7 @@
 ## 1. Executive Summary
 **AttendX** is a modern, end-to-end web application that revolutionizes educational attendance tracking by replacing manual roll-calls and basic sign-in sheets with **AI-powered facial recognition** and **dynamic session verification**. 
 
-Built with a high-performance **Python/Flask** backend, a responsive **Vanilla CSS/JS** frontend, and a cloud-native **Supabase (PostgreSQL)** database, AttendX guarantees secure, tamper-proof attendance marking while delivering a sleek, dark-themed user experience for **Students**, **Teachers**, and **Administrators**.
+Built with a high-performance **Python/Flask** backend, a responsive **Vanilla CSS/JS** frontend, and a cloud-native **Supabase (PostgreSQL)** database, AttendX guarantees secure, tamper proof attendance marking while delivering a sleek, dark-themed user experience for **Students**, **Teachers**, and **Administrators**.
 
 ---
 
@@ -53,7 +53,7 @@ graph TD
 
 ### **For Students**
 - **Biometric Identity Enrollment:** Easily capture and register facial vectors securely using any standard laptop or mobile webcam.
-- **Frictionless Attendance Marking:** Mark attendance in seconds by verifying their face against active classroom sessions—preventing buddy punching.
+- **Frictionless Attendance Marking:** Mark attendance in seconds by verifying their face against active classroom sessions preventing buddy punching.
 - **Live Attendance Dashboard:** View real-time attendance percentages, course schedules, and historical records at a glance.
 - **Instant Email Receipts:** Receive beautifully styled confirmation emails upon registration and attendance events.
 
