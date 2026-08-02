@@ -1,3 +1,4 @@
+import bcrypt
 from datetime import date
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -45,10 +46,19 @@ def update_profile():
     if not teacher:
         return jsonify({"error": "Teacher profile not found"}), 404
     data = request.get_json()
+    
+    current_password = data.get("current_password")
+    if not current_password:
+        return jsonify({"error": "Current password is required to save changes"}), 400
+        
+    if not bcrypt.checkpw(current_password.encode(), teacher.password.encode()):
+        return jsonify({"error": "Incorrect current password"}), 403
+
     if "username" in data: teacher.username = data["username"]
     if "phone" in data:    teacher.phone = data["phone"]
     db.session.commit()
     return jsonify({"message": "Profile updated"}), 200
+
 
 # ── Courses (Read-Only for teacher) ──────────────────────────────────────────
 

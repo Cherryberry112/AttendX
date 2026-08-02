@@ -1,4 +1,5 @@
-from flask import Blueprint, jsonify
+import bcrypt
+from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from __init__ import db
 from models import User, Course, Attendance
@@ -27,6 +28,32 @@ def get_profile():
         "face_enrolled": face_ok,
         "total_courses": student.enrolled_courses.count(),
     }), 200
+
+
+@student_bp.put("/profile")
+@jwt_required()
+def update_profile():
+    identity = get_jwt_identity()
+    student = _get_student(identity)
+    if not student:
+        return jsonify({"error": "Student profile not found"}), 404
+    
+    data = request.get_json()
+    
+    current_password = data.get("current_password")
+    if not current_password:
+        return jsonify({"error": "Current password is required to save changes"}), 400
+        
+    if not bcrypt.checkpw(current_password.encode(), student.password.encode()):
+        return jsonify({"error": "Incorrect current password"}), 403
+
+    if "username" in data: 
+        student.username = data["username"]
+    if "phone" in data:    
+        student.phone = data["phone"]
+    
+    db.session.commit()
+    return jsonify({"message": "Profile updated"}), 200
 
 
 @student_bp.get("/courses")
