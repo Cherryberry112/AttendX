@@ -50,6 +50,10 @@
           <select id="sortSelect" class="form-control" onchange="filterAndRender()">
             <option value="name_asc">Sort: Name (A-Z)</option>
             <option value="name_desc">Sort: Name (Z-A)</option>
+            <option value="id_asc">Sort: Student ID (Ascending)</option>
+            <option value="id_desc">Sort: Student ID (Descending)</option>
+            <option value="course_asc">Sort: Course (A-Z)</option>
+            <option value="course_desc">Sort: Course (Z-A)</option>
             <option value="att_desc">Sort: Attendance (High to Low)</option>
             <option value="att_asc">Sort: Attendance (Low to High)</option>
           </select>
@@ -65,7 +69,7 @@
             <tr>
               <th>Student Name</th>
               <th>Student ID</th>
-              <th>Enrolled Courses</th>
+              <th>Enrolled Course</th>
               <th>Attended / Total</th>
               <th>Attendance %</th>
               <th>Status</th>
@@ -115,19 +119,50 @@
     const courseFilter = document.getElementById("courseFilter").value;
     const sortVal = document.getElementById("sortSelect").value;
 
-    let list = allStudents.filter(s => {
-      const matchSearch = (s.username || "").toLowerCase().includes(search) ||
-                          (s.student_id || "").toLowerCase().includes(search) ||
-                          (s.email || "").toLowerCase().includes(search);
-      const matchCourse = !courseFilter || s.courses.some(c => c.name === courseFilter);
+    let flatList = [];
+    allStudents.forEach(s => {
+      if (!s.courses || s.courses.length === 0) {
+        flatList.push({
+          student_id: s.student_id || "",
+          username: s.username || "",
+          email: s.email || "",
+          course_name: "None",
+          attended_classes: s.attended_classes || 0,
+          total_classes: s.total_classes || 0,
+          attendance_percentage: s.attendance_percentage || 0
+        });
+      } else {
+        s.courses.forEach(c => {
+          flatList.push({
+            student_id: s.student_id || "",
+            username: s.username || "",
+            email: s.email || "",
+            course_name: c.name || "Course",
+            attended_classes: s.attended_classes || 0,
+            total_classes: s.total_classes || 0,
+            attendance_percentage: s.attendance_percentage || 0
+          });
+        });
+      }
+    });
+
+    let list = flatList.filter(s => {
+      const matchSearch = s.username.toLowerCase().includes(search) ||
+                          s.student_id.toLowerCase().includes(search) ||
+                          s.email.toLowerCase().includes(search);
+      const matchCourse = !courseFilter || s.course_name === courseFilter;
       return matchSearch && matchCourse;
     });
 
     list.sort((a, b) => {
-      if (sortVal === "name_asc")  return (a.username || "").localeCompare(b.username || "");
-      if (sortVal === "name_desc") return (b.username || "").localeCompare(a.username || "");
-      if (sortVal === "att_desc")  return b.attendance_percentage - a.attendance_percentage;
-      if (sortVal === "att_asc")   return a.attendance_percentage - b.attendance_percentage;
+      if (sortVal === "name_asc")    return a.username.localeCompare(b.username);
+      if (sortVal === "name_desc")   return b.username.localeCompare(a.username);
+      if (sortVal === "id_asc")      return a.student_id.localeCompare(b.student_id, undefined, {numeric: true});
+      if (sortVal === "id_desc")     return b.student_id.localeCompare(a.student_id, undefined, {numeric: true});
+      if (sortVal === "course_asc")  return a.course_name.localeCompare(b.course_name);
+      if (sortVal === "course_desc") return b.course_name.localeCompare(a.course_name);
+      if (sortVal === "att_desc")    return b.attendance_percentage - a.attendance_percentage;
+      if (sortVal === "att_asc")     return a.attendance_percentage - b.attendance_percentage;
       return 0;
     });
 
@@ -146,7 +181,7 @@
     tbody.innerHTML = list.map(s => {
       const pct = s.attendance_percentage;
       const badgeClass = pct >= 75 ? "badge-success" : pct >= 50 ? "badge-warning" : "badge-danger";
-      const courseBadges = s.courses.map(c => `<span class="course-code" style="margin-right:4px; margin-bottom:2px;">${c.name}</span>`).join("");
+      const courseBadge = `<span class="course-code">${s.course_name}</span>`;
 
       return `
         <tr>
@@ -155,7 +190,7 @@
             <div class="text-muted" style="font-size:0.75rem;">${s.email || ''}</div>
           </td>
           <td><code style="font-size:0.85rem; color:var(--primary);">${s.student_id}</code></td>
-          <td>${courseBadges || '<span class="text-muted">None</span>'}</td>
+          <td>${courseBadge}</td>
           <td><strong>${s.attended_classes}</strong> / ${s.total_classes}</td>
           <td>
             <div style="display:flex; align-items:center; gap:0.5rem;">
@@ -180,12 +215,12 @@
       return;
     }
 
-    const headers = ["Student Name", "Student ID", "Email", "Enrolled Courses", "Attended Classes", "Total Classes", "Attendance %"];
+    const headers = ["Student Name", "Student ID", "Email", "Enrolled Course", "Attended Classes", "Total Classes", "Attendance %"];
     const rows = list.map(s => [
       s.username,
       s.student_id,
       s.email || "",
-      s.courses.map(c => c.name).join("; "),
+      s.course_name,
       s.attended_classes,
       s.total_classes,
       `${s.attendance_percentage}%`

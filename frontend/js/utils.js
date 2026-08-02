@@ -653,7 +653,17 @@ function exportToCSV(filename, headers, rows) {
   URL.revokeObjectURL(url);
 }
 
-function printReport(title, headers, rows) {
+function printReport(title, arg2, arg3, arg4) {
+  let summary = "";
+  let headers, rows;
+  if (Array.isArray(arg2)) {
+    headers = arg2;
+    rows = arg3;
+  } else {
+    summary = arg2 || "";
+    headers = arg3 || [];
+    rows = arg4 || [];
+  }
   const printWin = window.open('', '_blank');
   if (!printWin) {
     alert("Please allow popups to export as PDF/Print.");
@@ -669,7 +679,8 @@ function printReport(title, headers, rows) {
       <title>${title}</title>
       <style>
         body { font-family: system-ui, -apple-system, sans-serif; padding: 2rem; color: #111; }
-        h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+        h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+        .summary { color: #444; font-size: 0.95rem; font-weight: 500; margin-bottom: 0.5rem; }
         .meta { color: #666; font-size: 0.85rem; margin-bottom: 1.5rem; }
         table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9rem; }
         th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
@@ -685,6 +696,7 @@ function printReport(title, headers, rows) {
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <div>
           <h1>${title}</h1>
+          ${summary ? `<div class="summary">${summary}</div>` : ''}
           <div class="meta">Generated on ${new Date().toLocaleString()} by AttendX</div>
         </div>
         <button onclick="window.print()" style="padding: 8px 16px; background: #6c5ce7; color: white; border: none; border-radius: 4px; cursor: pointer;">Print / Save as PDF</button>
