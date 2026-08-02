@@ -260,7 +260,7 @@ a  { text-decoration: none; color: inherit; }
   background: linear-gradient(135deg, rgba(255,107,0,0.04) 0%, transparent 60%);
   pointer-events: none;
 }
-.card:hover {
+.card[onclick]:hover, a.card:hover, button.card:hover {
   border-color: rgba(255,107,0,0.35);
   box-shadow: var(--shadow-glow);
 }
@@ -298,28 +298,26 @@ a  { text-decoration: none; color: inherit; }
   overflow-x: auto;
   border-radius: var(--radius-md);
 }
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.88rem;
-}
-thead th {
-  background: rgba(255,107,0,0.08);
-  color: var(--text-secondary);
-  font-weight: 600;
+table { width: 100%; border-collapse: separate; border-spacing: 0; }
+th {
   text-align: left;
   padding: 0.85rem 1rem;
+  color: var(--text-muted);
   font-size: 0.75rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  border-bottom: 2px solid var(--border-light);
 }
-tbody tr {
+td {
+  padding: 1rem;
+  font-size: 0.88rem;
   border-bottom: 1px solid var(--border-light);
-  transition: background var(--duration) var(--ease);
+  color: var(--text-primary);
 }
-tbody tr:hover { background: rgba(255,107,0,0.04); }
-tbody td { padding: 0.85rem 1rem; color: var(--text-primary); }
+tbody tr { transition: background var(--duration); }
+tbody tr[onclick]:hover { background: rgba(255,107,0,0.04); cursor: pointer; }
+tbody tr:last-child td { border-bottom: none; }
 
 /* ── Badges ──────────────────────────────────────────────────── */
 .badge {
