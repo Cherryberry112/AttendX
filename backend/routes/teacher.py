@@ -20,12 +20,20 @@ def get_profile():
     teacher = _get_teacher(identity)
     if not teacher:
         return jsonify({"error": "Teacher profile not found"}), 404
+    
+    courses_list = [{
+        "id": c.id,
+        "name": c.name,
+        "enrolled": c.students.count()
+    } for c in teacher.taught_courses]
+
     return jsonify({
         "id": teacher.id,
         "username": teacher.username,
         "email": teacher.email,
         "phone": teacher.phone,
-        "total_courses": teacher.taught_courses.count(),
+        "total_courses": len(courses_list),
+        "courses": courses_list,
     }), 200
 
 
@@ -152,93 +160,101 @@ def record_attendance(course_id):
 @jwt_required()
 def get_teacher_students():
     """Get all distinct students enrolled across courses taught by the teacher."""
-    identity = get_jwt_identity()
-    teacher = _get_teacher(identity)
-    if not teacher:
-        return jsonify({"error": "Teacher not found"}), 404
+    try:
+        identity = get_jwt_identity()
+        teacher = _get_teacher(identity)
+        if not teacher:
+            return jsonify({"error": "Teacher not found"}), 404
 
-    courses = teacher.taught_courses.all()
-    if not courses:
-        return jsonify([]), 200
+        courses = teacher.taught_courses.all()
+        if not courses:
+            return jsonify([]), 200
 
-    students_dict = {}
-    for c in courses:
-        for s in c.students:
-            if s.id not in students_dict:
-                students_dict[s.id] = {
-                    "id": s.id,
-                    "student_id": s.student_id or f"STU-{s.id:04d}",
-                    "username": s.username,
-                    "email": s.email,
-                    "courses": [],
-                    "total_classes": 0,
-                    "attended_classes": 0,
-                }
-            students_dict[s.id]["courses"].append({"id": c.id, "name": c.name})
+        students_dict = {}
+        for c in courses:
+            for s in c.students.all():
+                if s.id not in students_dict:
+                    students_dict[s.id] = {
+                        "id": s.id,
+                        "student_id": s.student_id or f"STU-{s.id:04d}",
+                        "username": s.username,
+                        "email": s.email,
+                        "courses": [],
+                        "total_classes": 0,
+                        "attended_classes": 0,
+                    }
+                students_dict[s.id]["courses"].append({"id": c.id, "name": c.name})
 
-    for sid, sdata in students_dict.items():
-        s_course_ids = [c["id"] for c in sdata["courses"]]
-        total_sessions = (db.session.query(db.func.count(db.distinct(Attendance.date, Attendance.course_id)))
-                          .filter(Attendance.course_id.in_(s_course_ids)).scalar()) or 0
-        attended_sessions = (db.session.query(db.func.count(Attendance.id))
-                             .filter(Attendance.student_id == sid, Attendance.course_id.in_(s_course_ids)).scalar()) or 0
+        for sid, sdata in students_dict.items():
+            s_course_ids = [c["id"] for c in sdata["courses"]]
+            total_sessions = (db.session.query(db.func.count(db.distinct(Attendance.date)))
+                              .filter(Attendance.course_id.in_(s_course_ids)).scalar()) or 0
+            attended_sessions = (db.session.query(db.func.count(Attendance.id))
+                                 .filter(Attendance.student_id == sid, Attendance.course_id.in_(s_course_ids)).scalar()) or 0
 
-        sdata["total_classes"] = total_sessions
-        sdata["attended_classes"] = attended_sessions
-        sdata["attendance_percentage"] = round((attended_sessions / total_sessions * 100), 1) if total_sessions > 0 else 0.0
+            sdata["total_classes"] = total_sessions
+            sdata["attended_classes"] = attended_sessions
+            sdata["attendance_percentage"] = round((attended_sessions / total_sessions * 100), 1) if total_sessions > 0 else 0.0
 
-    return jsonify(list(students_dict.values())), 200
+        return jsonify(list(students_dict.values())), 200
+    except Exception as e:
+        print(f"[ERROR] get_teacher_students failed: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 @teacher_bp.get("/courses/<int:course_id>/matrix")
 @jwt_required()
 def get_course_matrix(course_id):
     """Get student-by-session-date matrix for full course attendance export."""
-    identity = get_jwt_identity()
-    teacher = _get_teacher(identity)
-    if not teacher:
-        return jsonify({"error": "Teacher not found"}), 404
-    course = Course.query.filter_by(id=course_id, teacher_id=teacher.id).first()
-    if not course:
-        return jsonify({"error": "Course not found"}), 404
+    try:
+        identity = get_jwt_identity()
+        teacher = _get_teacher(identity)
+        if not teacher:
+            return jsonify({"error": "Teacher not found"}), 404
+        course = Course.query.filter_by(id=course_id, teacher_id=teacher.id).first()
+        if not course:
+            return jsonify({"error": "Course not found"}), 404
 
-    students = course.students.order_by(User.username).all()
-    dates_query = (db.session.query(Attendance.date)
-                   .filter(Attendance.course_id == course_id)
-                   .distinct()
-                   .order_by(Attendance.date.asc())
-                   .all())
-    dates = [str(d[0]) for d in dates_query]
+        students = course.students.order_by(User.username).all()
+        dates_query = (db.session.query(Attendance.date)
+                       .filter(Attendance.course_id == course_id)
+                       .distinct()
+                       .order_by(Attendance.date.asc())
+                       .all())
+        dates = [str(d[0]) for d in dates_query]
 
-    attendance_records = Attendance.query.filter_by(course_id=course_id).all()
-    att_map = set((rec.student_id, str(rec.date)) for rec in attendance_records)
+        attendance_records = Attendance.query.filter_by(course_id=course_id).all()
+        att_map = set((rec.student_id, str(rec.date)) for rec in attendance_records)
 
-    student_matrix = []
-    for s in students:
-        s_att = {}
-        present_count = 0
-        for d_str in dates:
-            is_present = (s.id, d_str) in att_map
-            s_att[d_str] = "P" if is_present else "A"
-            if is_present:
-                present_count += 1
+        student_matrix = []
+        for s in students:
+            s_att = {}
+            present_count = 0
+            for d_str in dates:
+                is_present = (s.id, d_str) in att_map
+                s_att[d_str] = "P" if is_present else "A"
+                if is_present:
+                    present_count += 1
 
-        total_sessions = len(dates)
-        pct = round((present_count / total_sessions * 100), 1) if total_sessions > 0 else 0.0
-        student_matrix.append({
-            "id": s.id,
-            "student_id": s.student_id or f"STU-{s.id:04d}",
-            "username": s.username,
-            "email": s.email,
-            "attendance": s_att,
-            "total_attended": present_count,
-            "total_sessions": total_sessions,
-            "percentage": pct
-        })
+            total_sessions = len(dates)
+            pct = round((present_count / total_sessions * 100), 1) if total_sessions > 0 else 0.0
+            student_matrix.append({
+                "id": s.id,
+                "student_id": s.student_id or f"STU-{s.id:04d}",
+                "username": s.username,
+                "email": s.email,
+                "attendance": s_att,
+                "total_attended": present_count,
+                "total_sessions": total_sessions,
+                "percentage": pct
+            })
 
-    return jsonify({
-        "course": {"id": course.id, "name": course.name},
-        "dates": dates,
-        "students": student_matrix
-    }), 200
+        return jsonify({
+            "course": {"id": course.id, "name": course.name},
+            "dates": dates,
+            "students": student_matrix
+        }), 200
+    except Exception as e:
+        print(f"[ERROR] get_course_matrix failed: {e}")
+        return jsonify({"error": str(e)}), 500
 

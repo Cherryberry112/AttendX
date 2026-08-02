@@ -263,7 +263,6 @@ a  { text-decoration: none; color: inherit; }
 .card:hover {
   border-color: rgba(255,107,0,0.35);
   box-shadow: var(--shadow-glow);
-  transform: translateY(-2px);
 }
 
 .stat-card {
