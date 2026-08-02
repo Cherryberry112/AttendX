@@ -200,11 +200,40 @@
 
     <!-- ── History Tab ─────────────────────────────────────────── -->
     <div id="panel-history" class="hidden">
-      <div class="card">
+      <div class="card" style="margin-bottom:1.5rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1rem;">
+          <div>
+            <h3>Session History</h3>
+            <p class="text-muted" style="font-size:0.85rem;">Summary of classes held and attendance rates.</p>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="exportCourseMatrixCSV()">
+            <i data-lucide="file-spreadsheet"></i> Export Full Attendance Matrix (CSV/Excel)
+          </button>
+        </div>
         <div class="table-wrapper">
           <table>
             <thead><tr><th>Date</th><th>Present</th><th>Total</th><th>Rate</th></tr></thead>
             <tbody id="historyTable"><tr><td colspan="4" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Matrix Grid View -->
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <div>
+            <h3>Student-by-Day Attendance Record (P / A)</h3>
+            <p class="text-muted" style="font-size:0.85rem;">Full student record across all class days.</p>
+          </div>
+        </div>
+        <div class="table-wrapper" style="max-height:420px; overflow-y:auto;">
+          <table class="table" style="font-size:0.85rem;">
+            <thead id="matrixHead">
+              <tr><th>Student Name</th><th>Student ID</th><th>Status</th></tr>
+            </thead>
+            <tbody id="matrixBody">
+              <tr><td colspan="3" class="text-muted" style="text-align:center;padding:1.5rem">Click Export or switch tabs to load matrix...</td></tr>
+            </tbody>
           </table>
         </div>
       </div>
@@ -550,12 +579,89 @@
     }
   }
 
+  let cachedMatrix = null;
+
+  async function loadMatrix() {
+    try {
+      const data = await api.get(`/teacher/courses/${courseId}/matrix`);
+      cachedMatrix = data;
+      const dates = data.dates || [];
+      const students = data.students || [];
+
+      // Render Matrix Header
+      const headRow = `<tr>
+        <th>Student Name</th>
+        <th>Student ID</th>
+        ${dates.map(d => `<th style="text-align:center;">${d}</th>`).join('')}
+        <th style="text-align:center;">Attended</th>
+        <th style="text-align:center;">Total</th>
+        <th style="text-align:center;">%</th>
+      </tr>`;
+      document.getElementById("matrixHead").innerHTML = headRow;
+
+      // Render Matrix Body
+      if (!students.length) {
+        document.getElementById("matrixBody").innerHTML = `<tr><td colspan="${dates.length + 5}" class="text-muted" style="text-align:center;padding:1.5rem">No students enrolled.</td></tr>`;
+        return;
+      }
+
+      document.getElementById("matrixBody").innerHTML = students.map(s => `
+        <tr>
+          <td style="font-weight:600;">${s.username}</td>
+          <td><code>${s.student_id}</code></td>
+          ${dates.map(d => {
+            const status = s.attendance[d] || "A";
+            const badgeClass = status === "P" ? "badge-success" : "badge-danger";
+            return `<td style="text-align:center;"><span class="badge ${badgeClass}">${status}</span></td>`;
+          }).join('')}
+          <td style="text-align:center; font-weight:700;">${s.total_attended}</td>
+          <td style="text-align:center;">${s.total_sessions}</td>
+          <td style="text-align:center;"><strong style="color:${s.percentage >= 75 ? 'var(--success)' : 'var(--danger)'}">${s.percentage}%</strong></td>
+        </tr>
+      `).join('');
+    } catch (err) {
+      console.warn("Matrix load failed:", err.message);
+    }
+  }
+
+  async function exportCourseMatrixCSV() {
+    try {
+      if (!cachedMatrix) {
+        cachedMatrix = await api.get(`/teacher/courses/${courseId}/matrix`);
+      }
+      const data = cachedMatrix;
+      if (!data || !data.students.length) {
+        showToast("No attendance matrix data available to export", "warning");
+        return;
+      }
+
+      const dates = data.dates || [];
+      const headers = ["Student Name", "Student ID", "Email", ...dates, "Total Attended", "Total Classes", "Attendance %"];
+      const rows = data.students.map(s => [
+        s.username,
+        s.student_id,
+        s.email || "",
+        ...dates.map(d => s.attendance[d] || "A"),
+        s.total_attended,
+        s.total_sessions,
+        `${s.percentage}%`
+      ]);
+
+      const courseName = (data.course.name || `Course_${courseId}`).replace(/\s+/g, '_');
+      exportToCSV(`${courseName}_Attendance_Matrix.csv`, headers, rows);
+      showToast(`Exported attendance matrix for ${courseName}`, "success");
+    } catch (err) {
+      showToast("Export failed: " + err.message, "error");
+    }
+  }
+
   function switchTab(tab) {
     ["camera","history","students"].forEach(t => {
       document.getElementById(`panel-${t}`).classList.toggle("hidden", t !== tab);
       document.getElementById(`tab-${t}`).classList.toggle("btn-primary", t === tab);
       document.getElementById(`tab-${t}`).classList.toggle("btn-outline", t !== tab);
     });
+    if (tab === "history") loadMatrix();
     if (tab !== "camera" && scanning) stopCamera();
   }
 

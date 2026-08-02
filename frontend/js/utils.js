@@ -512,6 +512,7 @@ function renderSidebar(role, activePage) {
   const navs = {
     teacher: [
       { icon: "layout-dashboard", label: "Dashboard",   href: "dashboard.html" },
+      { icon: "users",            label: "My Students", href: "students.html" },
       { icon: "user",             label: "Profile",     href: "profile.html" },
     ],
     student: [
@@ -622,6 +623,76 @@ function fmtDate(dateStr) {
   });
 }
 
+/* ── Export Utilities (CSV / Excel / PDF Print) ─────────────────── */
+function exportToCSV(filename, headers, rows) {
+  const escapeCell = (cell) => {
+    if (cell === null || cell === undefined) return '""';
+    const str = String(cell).replace(/"/g, '""');
+    return str.includes(',') || str.includes('\n') || str.includes('"') ? `"${str}"` : str;
+  };
+
+  const csvContent = '\uFEFF' + [
+    headers.map(escapeCell).join(','),
+    ...rows.map(row => row.map(escapeCell).join(','))
+  ].join('\r\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename.endsWith('.csv') ? filename : `${filename}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+function printReport(title, headers, rows) {
+  const printWin = window.open('', '_blank');
+  if (!printWin) {
+    alert("Please allow popups to export as PDF/Print.");
+    return;
+  }
+  const tableHeaders = headers.map(h => `<th>${h}</th>`).join('');
+  const tableRows = rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('');
+  
+  printWin.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${title}</title>
+      <style>
+        body { font-family: system-ui, -apple-system, sans-serif; padding: 2rem; color: #111; }
+        h1 { font-size: 1.5rem; margin-bottom: 0.5rem; }
+        .meta { color: #666; font-size: 0.85rem; margin-bottom: 1.5rem; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.9rem; }
+        th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; }
+        th { background: #f4f4f6; font-weight: 600; }
+        tr:nth-child(even) { background: #fafafa; }
+        @media print {
+          body { padding: 0; }
+          button { display: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h1>${title}</h1>
+          <div class="meta">Generated on ${new Date().toLocaleString()} by AttendX</div>
+        </div>
+        <button onclick="window.print()" style="padding: 8px 16px; background: #6c5ce7; color: white; border: none; border-radius: 4px; cursor: pointer;">Print / Save as PDF</button>
+      </div>
+      <table>
+        <thead><tr>${tableHeaders}</tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </body>
+    </html>
+  `);
+  printWin.document.close();
+}
+
 /* ── Export all ──────────────────────────────────────────────── */
 window.Auth = Auth;
 window.api = api;
@@ -633,4 +704,7 @@ window.toggleSidebar = toggleSidebar;
 window.logout = logout;
 window.createRing = createRing;
 window.fmtDate = fmtDate;
+window.exportToCSV = exportToCSV;
+window.printReport = printReport;
 window.USE_MOCK = USE_MOCK;
+

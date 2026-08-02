@@ -1,6 +1,57 @@
-/* ============================================================
-   AttendX — Dashboard & Portal Specific Styles
-   ============================================================ */
+/* ── Static Text Metric Blocks (No Card Container) ──────────────── */
+.stat-text-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2.25rem;
+  padding: 0.5rem 0;
+}
+
+.stat-text-item {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 0.75rem 0;
+  border-bottom: 2px solid rgba(168, 85, 247, 0.15);
+  transition: all var(--duration) var(--ease);
+}
+.stat-text-item:hover {
+  border-bottom-color: var(--primary);
+  transform: translateY(-2px);
+}
+
+.stat-text-icon {
+  width: 52px; height: 52px;
+  border-radius: var(--radius-md);
+  display: grid; place-items: center;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  background: rgba(168, 85, 247, 0.1);
+  color: var(--primary);
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.12);
+}
+.stat-text-icon.purple { background: rgba(168, 85, 247, 0.15); color: var(--primary-light); }
+.stat-text-icon.teal   { background: rgba(0, 212, 170, 0.15); color: #00d4aa; }
+.stat-text-icon.yellow { background: rgba(255, 179, 71, 0.15); color: #ffb347; }
+.stat-text-icon.red    { background: rgba(255, 77, 109, 0.15); color: #ff4d6d; }
+
+.stat-text-value {
+  font-size: 2.2rem;
+  font-weight: 800;
+  font-family: 'Space Grotesk', sans-serif;
+  line-height: 1;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+}
+
+.stat-text-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+}
 
 /* ── Course Cards ────────────────────────────────────────────── */
 .courses-grid {

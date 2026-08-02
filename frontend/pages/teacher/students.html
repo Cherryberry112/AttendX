@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>My Students — AttendX Teacher Portal</title>
+  <meta name="description" content="View and export attendance records for all enrolled students across your courses."/>
+  <link rel="stylesheet" href="../../css/global.css"/>
+  <link rel="stylesheet" href="../../css/dashboard.css"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+
+  <main class="main-content">
+    <div class="page-header">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
+        <div>
+          <h1>My Students</h1>
+          <p>Student directory and overall attendance statistics for your assigned courses.</p>
+        </div>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <button class="btn btn-outline btn-sm" onclick="handleExport('csv')">
+            <i data-lucide="download"></i> Export CSV
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="handleExport('excel')">
+            <i data-lucide="file-spreadsheet"></i> Export Excel
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="handleExport('pdf')">
+            <i data-lucide="printer"></i> Export PDF / Print
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filters & Controls Bar -->
+    <div class="card" style="margin-bottom:1.5rem; padding:1.25rem;">
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:center;">
+        <div class="search-box" style="flex:1; min-width:240px;">
+          <i data-lucide="search" class="search-icon"></i>
+          <input type="text" id="searchInput" placeholder="Search by student name or ID..." oninput="filterAndRender()"/>
+        </div>
+        <div style="min-width:180px;">
+          <select id="courseFilter" class="form-control" onchange="filterAndRender()">
+            <option value="">All Courses</option>
+          </select>
+        </div>
+        <div style="min-width:180px;">
+          <select id="sortSelect" class="form-control" onchange="filterAndRender()">
+            <option value="name_asc">Sort: Name (A-Z)</option>
+            <option value="name_desc">Sort: Name (Z-A)</option>
+            <option value="att_desc">Sort: Attendance (High to Low)</option>
+            <option value="att_asc">Sort: Attendance (Low to High)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Students Data Table -->
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div class="table-wrapper">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Student Name</th>
+              <th>Student ID</th>
+              <th>Enrolled Courses</th>
+              <th>Attended / Total</th>
+              <th>Attendance %</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="studentsTableBody">
+            <tr>
+              <td colspan="6" class="text-muted text-center" style="padding:3rem;">Loading student roster...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../../js/utils.js"></script>
+<script>
+  if (!Auth.guard("teacher")) throw new Error("Unauthorized");
+  renderSidebar("teacher", "My Students");
+
+  let allStudents = [];
+  let teacherCourses = [];
+
+  async function loadData() {
+    try {
+      const [studentsData, coursesData] = await Promise.all([
+        api.get("/teacher/students"),
+        api.get("/teacher/courses")
+      ]);
+      allStudents = studentsData || [];
+      teacherCourses = coursesData || [];
+
+      // Populate course filter dropdown
+      const courseSelect = document.getElementById("courseFilter");
+      courseSelect.innerHTML = `<option value="">All Courses (${teacherCourses.length})</option>` +
+        teacherCourses.map(c => `<option value="${c.name}">${c.name}</option>`).join("");
+
+      filterAndRender();
+    } catch (err) {
+      showToast(err.message || "Failed to load student roster", "error");
+    }
+  }
+
+  function getFilteredAndSortedStudents() {
+    const search = document.getElementById("searchInput").value.trim().toLowerCase();
+    const courseFilter = document.getElementById("courseFilter").value;
+    const sortVal = document.getElementById("sortSelect").value;
+
+    let list = allStudents.filter(s => {
+      const matchSearch = (s.username || "").toLowerCase().includes(search) ||
+                          (s.student_id || "").toLowerCase().includes(search) ||
+                          (s.email || "").toLowerCase().includes(search);
+      const matchCourse = !courseFilter || s.courses.some(c => c.name === courseFilter);
+      return matchSearch && matchCourse;
+    });
+
+    list.sort((a, b) => {
+      if (sortVal === "name_asc")  return (a.username || "").localeCompare(b.username || "");
+      if (sortVal === "name_desc") return (b.username || "").localeCompare(a.username || "");
+      if (sortVal === "att_desc")  return b.attendance_percentage - a.attendance_percentage;
+      if (sortVal === "att_asc")   return a.attendance_percentage - b.attendance_percentage;
+      return 0;
+    });
+
+    return list;
+  }
+
+  function filterAndRender() {
+    const list = getFilteredAndSortedStudents();
+    const tbody = document.getElementById("studentsTableBody");
+
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-muted text-center" style="padding:3rem;">No students found matching filters.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = list.map(s => {
+      const pct = s.attendance_percentage;
+      const badgeClass = pct >= 75 ? "badge-success" : pct >= 50 ? "badge-warning" : "badge-danger";
+      const courseBadges = s.courses.map(c => `<span class="course-code" style="margin-right:4px; margin-bottom:2px;">${c.name}</span>`).join("");
+
+      return `
+        <tr>
+          <td>
+            <div style="font-weight:600; color:var(--text-primary);">${s.username}</div>
+            <div class="text-muted" style="font-size:0.75rem;">${s.email || ''}</div>
+          </td>
+          <td><code style="font-size:0.85rem; color:var(--primary);">${s.student_id}</code></td>
+          <td>${courseBadges || '<span class="text-muted">None</span>'}</td>
+          <td><strong>${s.attended_classes}</strong> / ${s.total_classes}</td>
+          <td>
+            <div style="display:flex; align-items:center; gap:0.5rem;">
+              <div style="flex:1; height:6px; background:rgba(255,255,255,0.1); border-radius:4px; overflow:hidden; max-width:80px;">
+                <div style="width:${pct}%; height:100%; background:${pct >= 75 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)'}"></div>
+              </div>
+              <span style="font-weight:700; font-size:0.85rem;">${pct}%</span>
+            </div>
+          </td>
+          <td><span class="badge ${badgeClass}">${pct >= 75 ? 'Good' : pct >= 50 ? 'Warning' : 'Critical'}</span></td>
+        </tr>
+      `;
+    }).join("");
+
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function handleExport(type) {
+    const list = getFilteredAndSortedStudents();
+    if (!list.length) {
+      showToast("No student data available to export", "warning");
+      return;
+    }
+
+    const headers = ["Student Name", "Student ID", "Email", "Enrolled Courses", "Attended Classes", "Total Classes", "Attendance %"];
+    const rows = list.map(s => [
+      s.username,
+      s.student_id,
+      s.email || "",
+      s.courses.map(c => c.name).join("; "),
+      s.attended_classes,
+      s.total_classes,
+      `${s.attendance_percentage}%`
+    ]);
+
+    const courseFilter = document.getElementById("courseFilter").value;
+    const filename = courseFilter ? `Students_${courseFilter.replace(/\s+/g, '_')}` : "All_My_Students_Attendance";
+
+    if (type === "csv" || type === "excel") {
+      exportToCSV(`${filename}.csv`, headers, rows);
+      showToast(`Exported ${list.length} student records as ${type.toUpperCase()}`, "success");
+    } else if (type === "pdf") {
+      printReport(`AttendX — My Students Report ${courseFilter ? '(' + courseFilter + ')' : ''}`, headers, rows);
+    }
+  }
+
+  loadData();
+</script>
+<script>
+  document.addEventListener("DOMContentLoaded", function() {
+    if (window.lucide) lucide.createIcons();
+  });
+</script>
+</body>
+</html>

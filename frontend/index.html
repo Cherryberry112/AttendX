@@ -3,48 +3,84 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>AttendX — Smart Attendance System</title>
-  <meta name="description" content="AttendX uses real-time face recognition to automate attendance tracking for educational institutions."/>
+  <title>AttendX — Smart Face Recognition Attendance System</title>
+  <meta name="description" content="Take attendance with all ease! AttendX uses real-time face recognition to automate attendance tracking for educational institutions."/>
   <link rel="stylesheet" href="css/global.css"/>
   <link rel="stylesheet" href="css/auth.css"/>
   <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
 <div class="auth-page">
-  <div class="auth-card">
-    <div class="auth-logo">
-      <div class="auth-logo-icon">AX</div>
-      <h1>AttendX</h1>
-      <p>Smart Attendance with Face Recognition</p>
-    </div>
-
-    <form id="loginForm" novalidate>
-      <div class="form-group">
-        <label class="form-label" for="email">Email Address</label>
-        <div class="input-group">
-          <span class="input-icon"><i data-lucide="mail"></i></span>
-          <input id="email" type="email" class="form-control" placeholder="you@university.edu" required autocomplete="email"/>
-        </div>
+  <div class="auth-hero-container">
+    
+    <!-- Left Column: Hero Content & Taglines -->
+    <div class="auth-hero-content">
+      <div class="hero-badge">
+        <i data-lucide="sparkles"></i> Next-Gen Facial Recognition
+      </div>
+      
+      <h1 class="hero-headline">
+        Attend<span class="glow-brand">X</span>
+      </h1>
+      
+      <div class="hero-subheadline">
+        Take attendance with all ease!
+        <span class="hero-subtext">An online attendance taking system using face recognition.</span>
       </div>
 
-      <div class="form-group">
-        <label class="form-label" for="password">Password</label>
-        <div class="input-group">
-          <span class="input-icon"><i data-lucide="lock"></i></span>
-          <input id="password" type="password" class="form-control" placeholder="••••••••" required autocomplete="current-password"/>
+      <div class="hero-features">
+        <div class="hero-feature-item">
+          <div class="feature-icon-wrapper"><i data-lucide="scan"></i></div>
+          <span>Real-time webcam biometric verification & matching</span>
+        </div>
+        <div class="hero-feature-item">
+          <div class="feature-icon-wrapper"><i data-lucide="shield-check"></i></div>
+          <span>Zero buddy punching & automated anti-fraud checks</span>
+        </div>
+        <div class="hero-feature-item">
+          <div class="feature-icon-wrapper"><i data-lucide="file-spreadsheet"></i></div>
+          <span>One-click CSV / Excel gradebook & attendance export</span>
         </div>
       </div>
-
-      <button type="submit" class="btn btn-primary btn-block btn-lg" id="loginBtn">
-        Sign In
-      </button>
-    </form>
-
-    <div class="auth-divider">or</div>
-
-    <div class="auth-footer-text">
-      Don't have an account? <a href="pages/register.html">Create one →</a>
     </div>
+
+    <!-- Right Column: Translucent Login Card -->
+    <div class="auth-card">
+      <div class="auth-logo">
+        <div class="auth-logo-icon">AX</div>
+        <h1>Welcome Back</h1>
+        <p>Sign in to access your portal</p>
+      </div>
+
+      <form id="loginForm" novalidate>
+        <div class="form-group">
+          <label class="form-label" for="email">Email Address</label>
+          <div class="input-group">
+            <span class="input-icon"><i data-lucide="mail"></i></span>
+            <input id="email" type="email" class="form-control" placeholder="you@university.edu" required autocomplete="email"/>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">Password</label>
+          <div class="input-group">
+            <span class="input-icon"><i data-lucide="lock"></i></span>
+            <input id="password" type="password" class="form-control" placeholder="••••••••" required autocomplete="current-password"/>
+          </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block btn-lg" id="loginBtn" style="box-shadow: 0 0 25px rgba(168,85,247,0.4);">
+          Sign In
+        </button>
+      </form>
+
+      <div class="auth-divider">or</div>
+
+      <div class="auth-footer-text">
+        Don't have an account? <a href="pages/register.html">Create one →</a>
+      </div>
+    </div>
+
   </div>
 </div>
 
