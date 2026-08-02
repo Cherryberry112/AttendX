@@ -39,7 +39,7 @@
       <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:center;">
         <div class="search-box" style="flex:1; min-width:240px;">
           <i data-lucide="search" class="search-icon"></i>
-          <input type="text" id="searchInput" placeholder="Search by student name or ID..." oninput="filterAndRender()"/>
+          <input type="text" id="searchInput" placeholder="Search by student name, ID, or course..." oninput="filterAndRender()"/>
         </div>
         <div style="min-width:180px;">
           <select id="courseFilter" class="form-control" onchange="filterAndRender()">
@@ -149,20 +149,21 @@
     let list = flatList.filter(s => {
       const matchSearch = s.username.toLowerCase().includes(search) ||
                           s.student_id.toLowerCase().includes(search) ||
-                          s.email.toLowerCase().includes(search);
+                          s.email.toLowerCase().includes(search) ||
+                          s.course_name.toLowerCase().includes(search);
       const matchCourse = !courseFilter || s.course_name === courseFilter;
       return matchSearch && matchCourse;
     });
 
     list.sort((a, b) => {
-      if (sortVal === "name_asc")    return a.username.localeCompare(b.username);
-      if (sortVal === "name_desc")   return b.username.localeCompare(a.username);
-      if (sortVal === "id_asc")      return a.student_id.localeCompare(b.student_id, undefined, {numeric: true});
-      if (sortVal === "id_desc")     return b.student_id.localeCompare(a.student_id, undefined, {numeric: true});
-      if (sortVal === "course_asc")  return a.course_name.localeCompare(b.course_name);
-      if (sortVal === "course_desc") return b.course_name.localeCompare(a.course_name);
-      if (sortVal === "att_desc")    return b.attendance_percentage - a.attendance_percentage;
-      if (sortVal === "att_asc")     return a.attendance_percentage - b.attendance_percentage;
+      if (sortVal === "name_asc")    return a.username.localeCompare(b.username) || a.course_name.localeCompare(b.course_name);
+      if (sortVal === "name_desc")   return b.username.localeCompare(a.username) || a.course_name.localeCompare(b.course_name);
+      if (sortVal === "id_asc")      return a.student_id.localeCompare(b.student_id, undefined, {numeric: true}) || a.course_name.localeCompare(b.course_name);
+      if (sortVal === "id_desc")     return b.student_id.localeCompare(a.student_id, undefined, {numeric: true}) || a.course_name.localeCompare(b.course_name);
+      if (sortVal === "course_asc")  return a.course_name.localeCompare(b.course_name) || a.username.localeCompare(b.username);
+      if (sortVal === "course_desc") return b.course_name.localeCompare(a.course_name) || a.username.localeCompare(b.username);
+      if (sortVal === "att_desc")    return b.attendance_percentage - a.attendance_percentage || a.username.localeCompare(b.username);
+      if (sortVal === "att_asc")     return a.attendance_percentage - b.attendance_percentage || a.username.localeCompare(b.username);
       return 0;
     });
 
