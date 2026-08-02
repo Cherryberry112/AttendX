@@ -1,7 +1,6 @@
 # AttendX AI-Powered Biometric Attendance & Classroom Management System
 ## Complete Project Report & Technical Overview
 
----
 
 ## 1. Executive Summary
 **AttendX** is a modern, end-to-end web application that revolutionizes educational attendance tracking by replacing manual roll-calls and basic sign-in sheets with **AI-powered facial recognition** and **dynamic session verification**. 
