@@ -43,7 +43,7 @@ graph TD
 | **Backend API** | **Python 3 / Flask** | Lightweight, high-throughput RESTful API handling authentication, role-based authorization, session management, and business logic. |
 | **AI / Biometrics** | **OpenCV & dlib Face Recognition** | Extracts 128-dimensional facial embeddings from webcam captures, performing cosine similarity / Euclidean distance matching to verify student identities. |
 | **Database** | **Supabase (PostgreSQL 15)** | Relational schema storing users, courses, enrollments, facial biometric vectors, attendance sessions, and timestamped attendance logs. |
-| **Email Service** | **Brevo HTTP API** | Automated transactional email service using custom-designed Learnova-style HTML email templates for user onboarding and attendance notifications. |
+| **Email Service** | **Brevo HTTP API** | Automated transactional email service using custom-designed HTML email templates for user onboarding and attendance notifications. |
 | **Cloud Deployment** | **Render & Vercel** | **Vercel** delivers the static frontend globally via edge CDN; **Render** hosts the Python Flask backend containers with automatic CI/CD. |
 
 ---
@@ -107,7 +107,7 @@ sequenceDiagram
     API->>AI: Compare live image vs. stored vector (cosine similarity)
     AI-->>API: Match Confirmed (Distance < 0.60)
     API->>DB: Insert attendance record (status: present, timestamp)
-    API->>Email: Dispatch Learnova-style HTML receipt email
+    API->>Email: Dispatch custom HTML receipt email
     API-->>UI: Return success confirmation
     UI->>Student: Display green success checkmark & updated stats
 ```
@@ -118,4 +118,3 @@ sequenceDiagram
 - **Zero-Dependency Modern CSS:** Highly customized aesthetics featuring smooth gradients (`#6C63FF` primary branding), glassmorphic card overlays, and subtle hover animations without relying on bulky CSS frameworks.
 - **Resilient Cloud Networking:** Uses HTTP-based email APIs (`requests` + Brevo) and CORS-ready Flask configuration to operate seamlessly across cloud restrictions on Render and Vercel.
 - **Security Best Practices:** Password hashing, JWT/token-based session headers, and server-side biometric vector evaluation ensure user privacy and academic integrity.
-- 
