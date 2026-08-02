@@ -8,6 +8,85 @@
   <link rel="stylesheet" href="../../css/global.css"/>
   <link rel="stylesheet" href="../../css/dashboard.css"/>
   <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* ── Smart Enrollment Camera Styles ──────────────────────── */
+    #enrollVideo {
+      transform: scaleX(-1); /* Mirror front camera for natural selfie view */
+    }
+
+    /* Detection status overlay on camera */
+    .detection-overlay {
+      position: absolute;
+      bottom: 0.8rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.7);
+      color: #fff;
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 0.35rem 1.2rem;
+      border-radius: 999px;
+      z-index: 10;
+      white-space: nowrap;
+      transition: background 0.3s, color 0.3s;
+      pointer-events: none;
+    }
+    .detection-overlay.good {
+      background: rgba(15, 155, 88, 0.88);
+    }
+    .detection-overlay.bad {
+      background: rgba(255, 77, 109, 0.78);
+    }
+    .detection-overlay.captured {
+      background: rgba(15, 155, 88, 0.95);
+      font-size: 0.9rem;
+    }
+
+    /* Oval states for smart detection */
+    .face-oval.searching {
+      border-color: rgba(255, 77, 109, 0.5) !important;
+      box-shadow: 0 0 20px rgba(255, 77, 109, 0.15) !important;
+      animation: pulse-search 1.5s ease-in-out infinite;
+    }
+    .face-oval.ready {
+      border-color: rgba(15, 155, 88, 0.7) !important;
+      box-shadow: 0 0 25px rgba(15, 155, 88, 0.3) !important;
+      animation: none;
+    }
+    .face-oval.countdown {
+      border-color: rgba(15, 155, 88, 0.9) !important;
+      box-shadow: 0 0 35px rgba(15, 155, 88, 0.5) !important;
+      animation: pulse-ready 0.8s ease-in-out infinite;
+    }
+    .face-oval.flash {
+      border-color: #fff !important;
+      box-shadow: 0 0 60px rgba(255, 255, 255, 0.7), 0 0 30px rgba(15, 155, 88, 0.8) !important;
+      animation: capture-flash 0.5s ease-out;
+    }
+
+    @keyframes pulse-search {
+      0%, 100% { border-color: rgba(255, 77, 109, 0.35); }
+      50% { border-color: rgba(255, 77, 109, 0.7); }
+    }
+    @keyframes pulse-ready {
+      0%, 100% { box-shadow: 0 0 25px rgba(15, 155, 88, 0.3); }
+      50% { box-shadow: 0 0 45px rgba(15, 155, 88, 0.6); }
+    }
+    @keyframes capture-flash {
+      0% { box-shadow: 0 0 0 rgba(255,255,255,0); }
+      30% { box-shadow: 0 0 80px rgba(255,255,255,0.8); }
+      100% { box-shadow: 0 0 30px rgba(15, 155, 88, 0.4); }
+    }
+
+    /* Manual capture fallback button */
+    #manualCaptureBtn {
+      display: none;
+      margin-top: 0.5rem;
+    }
+    #manualCaptureBtn.visible {
+      display: inline-flex;
+    }
+  </style>
 </head>
 <body>
 <div class="app-layout">
@@ -16,7 +95,7 @@
   <main class="main-content">
     <div class="page-header">
       <h1><i data-lucide="smile"></i> Face Enrollment</h1>
-      <p>We'll capture your face from 5 angles to ensure accurate detection.</p>
+      <p>We'll capture your face from 5 angles. The camera will auto-capture when it detects your face clearly.</p>
     </div>
 
     <div class="enroll-container">
@@ -35,17 +114,22 @@
           <div class="face-guide">
             <div class="face-oval" id="faceOval"></div>
           </div>
+          <!-- Real-time detection feedback overlay -->
+          <div class="detection-overlay" id="detectionOverlay">Click "Start Enrollment" to begin</div>
         </div>
         <div class="step-instruction" style="padding:1.5rem;">
           <h3 id="stepTitle">Ready to Start</h3>
-          <p id="stepDesc">Position your face within the oval and click "Start Enrollment".</p>
+          <p id="stepDesc">Position your face within the oval and click "Start Enrollment". The camera will detect your face and capture automatically.</p>
         </div>
       </div>
 
       <!-- Controls -->
-      <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;" id="enrollControls">
+      <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap; align-items:center;" id="enrollControls">
         <button class="btn btn-primary btn-lg" id="startEnrollBtn" onclick="startEnrollment()">
           <i data-lucide="play"></i> Start Enrollment
+        </button>
+        <button class="btn btn-outline btn-sm hidden" id="manualCaptureBtn" onclick="manualCapture()">
+          <i data-lucide="camera"></i> Capture Manually
         </button>
       </div>
 
@@ -68,17 +152,26 @@
   renderSidebar("student", "Face Enroll");
 
   const STEPS = [
-    { title: "Look Straight",   desc: "Face the camera directly. Keep your face inside the oval.",       icon: '<i data-lucide="user"></i>' },
-    { title: "Turn Left",       desc: "Slowly turn your head to the LEFT while keeping eyes on camera.", icon: '<i data-lucide="arrow-left"></i>' },
-    { title: "Turn Right",      desc: "Now turn your head to the RIGHT.",                               icon: '<i data-lucide="arrow-right"></i>' },
-    { title: "Look Up",         desc: "Tilt your chin slightly UP.",                                     icon: '<i data-lucide="arrow-up"></i>' },
-    { title: "Look Down",       desc: "Tilt your chin slightly DOWN.",                                   icon: '<i data-lucide="arrow-down"></i>' },
+    { title: "Look Straight",   desc: "Face the camera directly. Keep your face centered in the oval.",     icon: '<i data-lucide="user"></i>' },
+    { title: "Turn Left",       desc: "Slowly turn your head to YOUR LEFT while keeping eyes on camera.",   icon: '<i data-lucide="arrow-left"></i>' },
+    { title: "Turn Right",      desc: "Now turn your head to YOUR RIGHT.",                                  icon: '<i data-lucide="arrow-right"></i>' },
+    { title: "Look Up",         desc: "Tilt your chin slightly UP.",                                        icon: '<i data-lucide="arrow-up"></i>' },
+    { title: "Look Down",       desc: "Tilt your chin slightly DOWN.",                                      icon: '<i data-lucide="arrow-down"></i>' },
   ];
 
-  let currentStep  = -1;
-  let stream       = null;
-  let captures     = [];
-  let capturing    = false;
+  let currentStep       = -1;
+  let stream            = null;
+  let captures          = [];
+  let detectionInterval = null;
+  let goodSince         = null;   // timestamp when good conditions started
+  let stepStartTime     = null;   // timestamp when current step started
+  let capturing         = false;  // lock to prevent double-capture
+
+  const HOLD_TIME      = 2000;  // ms face must be steady before auto-capture
+  const CHECK_INTERVAL = 250;   // ms between detection checks
+  const MANUAL_DELAY   = 12000; // ms before showing manual capture fallback
+
+  // ── Step Indicators ──────────────────────────────────────────
 
   function buildStepIndicators() {
     const container = document.getElementById("stepIndicators");
@@ -105,100 +198,256 @@
     }
   }
 
-  let lightCheckInterval = null;
-  function startLightingCheck() {
-    if (lightCheckInterval) clearInterval(lightCheckInterval);
-    lightCheckInterval = setInterval(() => {
-      const video = document.getElementById("enrollVideo");
-      if (!video || video.paused || video.ended || !video.videoWidth) return;
-      const c = document.createElement("canvas");
-      c.width = 64; c.height = 64;
-      const ctx = c.getContext("2d");
-      ctx.drawImage(video, 0, 0, 64, 64);
-      const data = ctx.getImageData(0, 0, 64, 64).data;
-      let total = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        total += (0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]);
+  // ── Smart Face Detection (client-side) ───────────────────────
+
+  function analyzeFrame(video) {
+    /**
+     * Analyze the video frame for face-enrollment readiness.
+     * Checks the oval region for:
+     *   1. Brightness — reject too-dark frames
+     *   2. Detail variance — faces have features (eyes, nose), walls don't
+     *   3. Warm-tone content — face pixels tend to be R-dominant
+     * Returns { ok, brightness, variance, warmRatio, issue }
+     */
+    const size = 120; // small canvas for fast analysis
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, size, size);
+    const data = ctx.getImageData(0, 0, size, size).data;
+
+    // Oval region: center ~50% width, ~65% height of the analysis canvas
+    const cx = size / 2, cy = size / 2;
+    const rx = size * 0.23, ry = size * 0.33;
+
+    let totalBrightness = 0;
+    let ovalPixels = 0;
+    let warmPixels = 0;
+    let values = [];
+
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = (x - cx) / rx;
+        const dy = (y - cy) / ry;
+        if (dx * dx + dy * dy > 1) continue; // outside oval
+
+        ovalPixels++;
+        const i = (y * size + x) * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const brightness = 0.299 * r + 0.587 * g + 0.114 * b;
+
+        totalBrightness += brightness;
+        values.push(brightness);
+
+        // Warm-tone detection (inclusive across skin tones)
+        // Face pixels: R is dominant, some color variance
+        const maxC = Math.max(r, g, b);
+        const minC = Math.min(r, g, b);
+        if (maxC > 50 && (maxC - minC) > 10 && r >= g && r > b) {
+          warmPixels++;
+        }
       }
-      const avgBrightness = total / (data.length / 4);
-      const warnBox = document.getElementById("lightingWarning");
-      if (avgBrightness < 40) {
-        warnBox?.classList.remove("hidden");
-      } else {
-        warnBox?.classList.add("hidden");
-      }
-    }, 500);
+    }
+
+    if (ovalPixels < 10) {
+      return { ok: false, issue: "no-data", brightness: 0, variance: 0, warmRatio: 0 };
+    }
+
+    const avgBrightness = totalBrightness / ovalPixels;
+    const warmRatio = warmPixels / ovalPixels;
+
+    // Compute variance of brightness (detail check)
+    let variance = 0;
+    for (const v of values) {
+      variance += (v - avgBrightness) * (v - avgBrightness);
+    }
+    variance /= values.length;
+
+    // Thresholds
+    const brightEnough = avgBrightness >= 50;
+    const hasDetail    = variance >= 180;    // faces have eyes/nose/mouth = high variance
+    const hasFace      = warmRatio >= 0.18;  // warm-toned content in oval
+
+    let issue = null;
+    if (!brightEnough) issue = "dark";
+    else if (!hasFace)  issue = "no-face";
+    else if (!hasDetail) issue = "no-detail";
+
+    return {
+      ok: brightEnough && hasDetail && hasFace,
+      brightness: avgBrightness,
+      variance,
+      warmRatio,
+      issue,
+    };
   }
+
+  // ── Detection Loop ───────────────────────────────────────────
+
+  function startDetectionLoop() {
+    stopDetectionLoop();
+    goodSince = null;
+    stepStartTime = Date.now();
+    capturing = false;
+
+    // Hide manual button initially
+    document.getElementById("manualCaptureBtn").classList.remove("visible");
+
+    detectionInterval = setInterval(() => {
+      if (capturing) return;
+      const video = document.getElementById("enrollVideo");
+      if (!video || video.paused || !video.videoWidth) return;
+      if (currentStep < 0 || currentStep >= STEPS.length) return;
+
+      const result = analyzeFrame(video);
+      const oval    = document.getElementById("faceOval");
+      const overlay = document.getElementById("detectionOverlay");
+
+      // Show manual capture button after MANUAL_DELAY
+      if (Date.now() - stepStartTime > MANUAL_DELAY) {
+        document.getElementById("manualCaptureBtn").classList.add("visible");
+      }
+
+      if (result.ok) {
+        if (!goodSince) goodSince = Date.now();
+        const elapsed = Date.now() - goodSince;
+
+        if (elapsed >= HOLD_TIME) {
+          // All conditions met for long enough — auto-capture!
+          doCapture();
+        } else {
+          // Show countdown
+          const remaining = Math.ceil((HOLD_TIME - elapsed) / 1000);
+          oval.className = "face-oval countdown";
+          overlay.className = "detection-overlay good";
+          overlay.textContent = `✓ Face detected — hold still... ${remaining}`;
+        }
+      } else {
+        // Conditions not met — reset countdown
+        goodSince = null;
+        oval.className = "face-oval searching";
+        overlay.className = "detection-overlay bad";
+
+        switch (result.issue) {
+          case "dark":
+            overlay.textContent = "💡 Too dark — move to a brighter area";
+            document.getElementById("lightingWarning")?.classList.remove("hidden");
+            break;
+          case "no-face":
+            overlay.textContent = "👤 Position your face inside the oval";
+            document.getElementById("lightingWarning")?.classList.add("hidden");
+            break;
+          case "no-detail":
+            overlay.textContent = "📏 Move closer to the camera";
+            document.getElementById("lightingWarning")?.classList.add("hidden");
+            break;
+          default:
+            overlay.textContent = "🔍 Looking for face...";
+        }
+      }
+    }, CHECK_INTERVAL);
+  }
+
+  function stopDetectionLoop() {
+    if (detectionInterval) {
+      clearInterval(detectionInterval);
+      detectionInterval = null;
+    }
+  }
+
+  // ── Capture ──────────────────────────────────────────────────
+
+  function doCapture() {
+    if (capturing) return;
+    capturing = true;
+    stopDetectionLoop();
+
+    const video  = document.getElementById("enrollVideo");
+    const oval   = document.getElementById("faceOval");
+    const overlay = document.getElementById("detectionOverlay");
+
+    // Capture the frame (unmirrored — CSS transform doesn't affect canvas)
+    const canvas = document.createElement("canvas");
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0);
+    const frame = canvas.toDataURL("image/jpeg", 0.85);
+    captures.push(frame);
+
+    // Flash effect
+    oval.className = "face-oval flash";
+    overlay.className = "detection-overlay captured";
+    overlay.textContent = `📸 Step ${currentStep + 1}/${STEPS.length} captured!`;
+
+    showToast(`Step ${currentStep + 1}/${STEPS.length} captured ✓`, "success", 1500);
+
+    // Hide manual capture button
+    document.getElementById("manualCaptureBtn").classList.remove("visible");
+
+    currentStep++;
+
+    // Brief pause, then advance to next step or submit
+    setTimeout(() => {
+      if (currentStep < STEPS.length) {
+        updateStepUI(currentStep);
+        oval.className = "face-oval searching";
+        overlay.className = "detection-overlay";
+        overlay.textContent = "🔍 Detecting face...";
+        startDetectionLoop();
+      } else {
+        // All 5 steps done
+        submitEnrollment();
+      }
+    }, 1200);
+  }
+
+  function manualCapture() {
+    // Fallback: user triggers capture manually if auto-detection fails
+    if (capturing || currentStep < 0 || currentStep >= STEPS.length) return;
+    showToast("Manual capture — quality will be checked by the server.", "info", 2000);
+    doCapture();
+  }
+
+  // ── Enrollment Flow ──────────────────────────────────────────
 
   async function startEnrollment() {
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480, facingMode: "user" }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, facingMode: "user" },
+        audio: false,
+      });
       document.getElementById("enrollVideo").srcObject = stream;
       document.getElementById("startEnrollBtn").classList.add("hidden");
+
       captures     = [];
       currentStep  = 0;
       updateStepUI(0);
-      startLightingCheck();
-      captureStep();
+
+      // Small delay to let camera warm up before starting detection
+      const overlay = document.getElementById("detectionOverlay");
+      overlay.className = "detection-overlay";
+      overlay.textContent = "📷 Camera starting...";
+
+      setTimeout(() => {
+        startDetectionLoop();
+      }, 800);
+
     } catch (err) {
       showToast("Cannot access camera: " + err.message, "error");
     }
   }
 
-  function captureStep() {
-    if (currentStep >= STEPS.length) {
-      if (lightCheckInterval) clearInterval(lightCheckInterval);
-      submitEnrollment();
-      return;
-    }
-
-    const oval = document.getElementById("faceOval");
-    oval.className = "face-oval detecting";
-
-    // Give user 2.5s to position, then capture
-    setTimeout(() => {
-      oval.className = "face-oval detected";
-      const video  = document.getElementById("enrollVideo");
-      const canvas = document.createElement("canvas");
-      canvas.width  = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      ctx.drawImage(video, 0, 0);
-
-      // Check brightness of captured frame
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-      let total = 0;
-      for (let i = 0; i < data.length; i += 16) {
-        total += (0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]);
-      }
-      const avgBrightness = total / (data.length / 16);
-      if (avgBrightness < 30) {
-        showToast("Frame too dark! Please move to better lighting.", "error", 2500);
-      }
-
-      const frame = canvas.toDataURL("image/jpeg", 0.85);
-      captures.push(frame);
-
-      showToast(`Step ${currentStep + 1}/${STEPS.length} captured <i data-lucide="check"></i>`, "success", 1500);
-      currentStep++;
-
-      setTimeout(() => {
-        oval.className = "face-oval";
-        updateStepUI(currentStep);
-        if (currentStep < STEPS.length) {
-          captureStep();
-        } else {
-          if (lightCheckInterval) clearInterval(lightCheckInterval);
-          submitEnrollment();
-        }
-      }, 800);
-    }, 2500);
-  }
-
   async function submitEnrollment() {
+    stopDetectionLoop();
     updateStepUI(STEPS.length);
     document.getElementById("stepTitle").textContent = "⏳ Processing…";
-    document.getElementById("stepDesc").textContent  = "Sending captures to server…";
+    document.getElementById("stepDesc").textContent  = "Analyzing your face captures…";
+
+    const overlay = document.getElementById("detectionOverlay");
+    overlay.className = "detection-overlay good";
+    overlay.textContent = "⏳ Uploading to server...";
 
     try {
       await api.post("/face/enroll", { frames: captures });
@@ -206,12 +455,18 @@
       document.getElementById("enrollCameraBox").classList.add("hidden");
       document.querySelector(".step-instruction").classList.add("hidden");
       document.getElementById("successState").classList.remove("hidden");
+      if (window.lucide) lucide.createIcons();
     } catch (err) {
-      showToast("Enrollment failed: " + err.message + ". Please retry.", "error");
-      // Reset
+      const errMsg = err.message || "Unknown error";
+      showToast("Enrollment failed: " + errMsg + ". Please retry.", "error");
+
+      // Reset for retry
       captures    = [];
       currentStep = 0;
       updateStepUI(0);
+      overlay.className = "detection-overlay bad";
+      overlay.textContent = "❌ Failed — click Retry to try again";
+      document.getElementById("faceOval").className = "face-oval";
       document.getElementById("startEnrollBtn").innerHTML = "<i data-lucide='refresh-cw'></i> Retry Enrollment";
       if (window.lucide) lucide.createIcons();
       document.getElementById("startEnrollBtn").classList.remove("hidden");
