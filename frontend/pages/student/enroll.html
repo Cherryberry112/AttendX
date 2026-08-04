@@ -122,46 +122,49 @@
 // STEP DEFINITIONS — yaw/pitch in degrees from landmark-based pose estimation
 //
 // Coordinate convention (unmirrored camera frame):
-//   yaw  > 0: nose tip right of eye midpoint → user turned THEIR LEFT
-//   yaw  < 0: nose tip left  of eye midpoint → user turned THEIR RIGHT
-//   pitch> 0: face tilted up  (nose above neutral)
-//   pitch< 0: face tilted down (nose below neutral)
+// PITCH SIGN CONVENTION (from face-api.js 68 landmarks in camera coordinates):
+//   Chin DOWN → nose moves UP in image → pitchRaw DECREASES → pitch POSITIVE
+//   Chin UP   → nose moves DOWN in image → pitchRaw INCREASES → pitch NEGATIVE
+//   yaw > 0   → nose right of eye midpoint → user turned THEIR LEFT
+//   yaw < 0   → nose left  of eye midpoint → user turned THEIR RIGHT
 // ─────────────────────────────────────────────────────────────────────────────
 const STEPS = [
   {
     title:"Look Straight",
     desc: "Face the camera directly. Keep your head level and centered in the oval.",
     icon: "user",
-    yawMin:-15, yawMax:15, pitchMin:-15, pitchMax:15,
+    yawMin:-15, yawMax:15, pitchMin:-18, pitchMax:18,
     guide: "Look straight at camera",
   },
   {
     title:"Turn Left",
     desc: "Slowly turn your head to YOUR LEFT.",
     icon: "arrow-left",
-    yawMin:12, yawMax:65, pitchMin:-25, pitchMax:25,
+    yawMin:12, yawMax:70, pitchMin:-30, pitchMax:30,
     guide: "← Turn left",
   },
   {
     title:"Turn Right",
     desc: "Now turn your head to YOUR RIGHT.",
     icon: "arrow-right",
-    yawMin:-65, yawMax:-12, pitchMin:-25, pitchMax:25,
+    yawMin:-70, yawMax:-12, pitchMin:-30, pitchMax:30,
     guide: "Turn right →",
   },
   {
+    // Chin UP → pitch NEGATIVE (nose moves down in image, pitchRaw > 0.45)
     title:"Look Up",
-    desc: "Tilt your chin slightly upward.",
+    desc: "Tilt your chin slightly upward — look toward the ceiling a bit.",
     icon: "arrow-up",
-    yawMin:-22, yawMax:22, pitchMin:10, pitchMax:60,
-    guide: "↑ Look up",
+    yawMin:-25, yawMax:25, pitchMin:-65, pitchMax:-8,
+    guide: "↑ Tilt chin up",
   },
   {
+    // Chin DOWN → pitch POSITIVE (nose moves up in image, pitchRaw < 0.45)
     title:"Look Down",
-    desc: "Tilt your chin slightly downward.",
+    desc: "Tilt your chin slightly downward — look toward your chest a bit.",
     icon: "arrow-up-down",
-    yawMin:-22, yawMax:22, pitchMin:-60, pitchMax:-10,
-    guide: "↓ Look down",
+    yawMin:-25, yawMax:25, pitchMin:8, pitchMax:65,
+    guide: "↓ Tilt chin down",
   },
 ];
 
@@ -263,10 +266,12 @@ function computePose(landmarks) {
   //  positive → nose right of center → user turned their LEFT
   const yaw = (noseTip.x - eyeMid.x) / (faceW / 2) * 45;
 
-  // Pitch: nose vertical offset below eye line, normalised by face height
-  //  neutral ~0.45; smaller → looking up; larger → looking down
+  // Pitch from 68 landmarks:
+  //  pitchRaw = fraction of face height from eye line to nose tip
+  //  When chin tilts DOWN: nose moves UP in image → pitchRaw DECREASES → pitch POSITIVE
+  //  When chin tilts UP:   nose moves DOWN in image → pitchRaw INCREASES → pitch NEGATIVE
   const pitchRaw = (noseTip.y - eyeMid.y) / faceH;
-  const pitch    = -(pitchRaw - 0.45) * 90;  // positive → looking up
+  const pitch    = -(pitchRaw - 0.45) * 90;  // positive = chin down, negative = chin up
 
   return { yaw, pitch };
 }
@@ -283,17 +288,23 @@ function poseHint(pose) {
 
   if (s.title === "Turn Left") {
     if (pose.yaw < s.yawMin) return "Turn your head to YOUR LEFT ←";
+    if (pose.yaw > s.yawMax) return "Good! Hold it there…";
   } else if (s.title === "Turn Right") {
     if (pose.yaw > s.yawMax) return "Turn your head to YOUR RIGHT →";
+    if (pose.yaw < s.yawMin) return "Good! Hold it there…";
   } else if (s.title === "Look Up") {
-    if (pose.pitch < s.pitchMin) return "Tilt your chin UP ↑";
+    // pitch < 0 = chin up
+    if (pose.pitch > s.pitchMax) return "Tilt your chin UP ↑";
+    if (pose.pitch < s.pitchMin) return "Good! Hold it there…";
   } else if (s.title === "Look Down") {
-    if (pose.pitch > s.pitchMax) return "Tilt your chin DOWN ↓";
+    // pitch > 0 = chin down
+    if (pose.pitch < s.pitchMin) return "Tilt your chin DOWN ↓";
+    if (pose.pitch > s.pitchMax) return "Good! Hold it there…";
   } else if (s.title === "Look Straight") {
-    if (pose.yaw < s.yawMin) return "Turn a bit right →";
-    if (pose.yaw > s.yawMax) return "Turn a bit left ←";
-    if (pose.pitch < s.pitchMin) return "Tilt a bit up ↑";
-    if (pose.pitch > s.pitchMax) return "Tilt a bit down ↓";
+    if (pose.yaw  < s.yawMin)   return "Turn a bit right →";
+    if (pose.yaw  > s.yawMax)   return "Turn a bit left ←";
+    if (pose.pitch < s.pitchMin) return "Raise chin slightly ↑";
+    if (pose.pitch > s.pitchMax) return "Lower chin slightly ↓";
   }
 
   return s.guide || s.desc;
