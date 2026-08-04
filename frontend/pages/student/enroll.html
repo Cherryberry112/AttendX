@@ -53,6 +53,14 @@
     @keyframes spin { to{transform:rotate(360deg)} }
     .loader-bar-wrap { width:200px; height:6px; background:rgba(255,255,255,0.15); border-radius:3px; overflow:hidden; }
     .loader-bar      { height:100%; width:0; background:#818cf8; border-radius:3px; transition:width 0.3s; }
+    /* Live angle debug badge */
+    #poseDebug {
+      position:absolute; top:0.5rem; left:0.5rem;
+      background:rgba(0,0,0,0.72); color:#a5f3fc;
+      font-size:0.72rem; font-family:monospace;
+      padding:0.3rem 0.6rem; border-radius:6px;
+      z-index:11; pointer-events:none; line-height:1.5;
+    }
   </style>
 </head>
 <body>
@@ -81,6 +89,7 @@
             <div class="loader-bar-wrap"><div class="loader-bar" id="loaderBar"></div></div>
             <span style="font-size:0.75rem;opacity:0.6;" id="loaderNote">~270 KB — one-time download</span>
           </div>
+          <div id="poseDebug" style="display:none">Y:? P:?</div>
         </div>
         <div class="step-instruction" style="padding:1.5rem;">
           <h3 id="stepTitle">Getting Ready…</h3>
@@ -151,20 +160,20 @@ const STEPS = [
     guide: "Turn right →",
   },
   {
-    // Chin UP → pitch NEGATIVE (nose moves down in image, pitchRaw > 0.45)
+    // Chin UP → pitch NEGATIVE (pitchRaw > neutral, nose appears lower)
     title:"Look Up",
-    desc: "Tilt your chin slightly upward — look toward the ceiling a bit.",
+    desc: "Tilt your chin upward — look toward the ceiling.",
     icon: "arrow-up",
-    yawMin:-25, yawMax:25, pitchMin:-65, pitchMax:-8,
-    guide: "↑ Tilt chin up",
+    yawMin:-28, yawMax:28, pitchMin:-80, pitchMax:-6,
+    guide: "↑ Tilt chin UP toward ceiling",
   },
   {
-    // Chin DOWN → pitch POSITIVE (nose moves up in image, pitchRaw < 0.45)
+    // Chin DOWN → pitch POSITIVE (pitchRaw < neutral, nose appears higher)
     title:"Look Down",
-    desc: "Tilt your chin slightly downward — look toward your chest a bit.",
+    desc: "Tilt your chin downward — look toward your chest.",
     icon: "arrow-up-down",
-    yawMin:-25, yawMax:25, pitchMin:8, pitchMax:65,
-    guide: "↓ Tilt chin down",
+    yawMin:-28, yawMax:28, pitchMin:6, pitchMax:80,
+    guide: "↓ Tilt chin DOWN toward chest",
   },
 ];
 
@@ -173,7 +182,7 @@ const MODEL_URLS = [
   "https://justadudewhohacks.github.io/face-api.js/models",
   "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights"
 ];
-const HOLD_FRAMES = 6;    // fast capture when pose is held (~0.35s)
+const HOLD_FRAMES = 3;    // 3 frames ~0.2s at 15fps — fast & responsive
 const LOOP_MS     = 66;   // ~15fps
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -267,11 +276,16 @@ function computePose(landmarks) {
   const yaw = (noseTip.x - eyeMid.x) / (faceW / 2) * 45;
 
   // Pitch from 68 landmarks:
-  //  pitchRaw = fraction of face height from eye line to nose tip
-  //  When chin tilts DOWN: nose moves UP in image → pitchRaw DECREASES → pitch POSITIVE
-  //  When chin tilts UP:   nose moves DOWN in image → pitchRaw INCREASES → pitch NEGATIVE
+  //  pitchRaw = fraction of face height (eye-to-chin) that nose tip is from eyes
+  //  Neutral ~0.40 (nose ≈ 40% of eye-to-chin distance for face-api.js 68pt model)
+  //  Chin UP:   pitchRaw INCREASES (chin comes toward camera, faceH shrinks) → pitch NEGATIVE
+  //  Chin DOWN: pitchRaw DECREASES (nose appears higher) → pitch POSITIVE
   const pitchRaw = (noseTip.y - eyeMid.y) / faceH;
-  const pitch    = -(pitchRaw - 0.45) * 90;  // positive = chin down, negative = chin up
+  const pitch    = -(pitchRaw - 0.40) * 90;  // positive = chin down, negative = chin up
+
+  // Show live debug
+  const dbg = document.getElementById("poseDebug");
+  if (dbg) { dbg.style.display="block"; dbg.textContent = `Y:${yaw.toFixed(1)}° P:${pitch.toFixed(1)}°`; }
 
   return { yaw, pitch };
 }
