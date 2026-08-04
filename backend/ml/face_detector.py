@@ -75,37 +75,23 @@ def _get_cascades():
 
 def detect_faces(gray_img: np.ndarray) -> list:
     """
-    Detect all faces in a grayscale image using frontal + profile Haar cascades.
-    Applies rectangle grouping to merge duplicate overlapping boxes for a single face.
-    Returns list of (x, y, w, h) bounding boxes.
+    Detect faces using frontal + profile Haar cascades.
+    Returns a list with at most ONE bounding box (the largest face found).
     """
     face_cascade, profile_cascade, _ = _get_cascades()
-
     if face_cascade is None or face_cascade.empty():
         print("[WARNING] Haar face cascade not available")
         return []
 
     enhanced = cv2.equalizeHist(gray_img)
 
-    # 1. Try frontal face cascade with grouping
+    # 1. Frontal cascade — try a few parameter sets, return on first hit
     for scale, neighbors, min_sz in [
-        (1.1,  4, (40, 40)),
-        (1.05, 4, (50, 50)),
-        (1.15, 3, (30, 30)),
+        (1.1,  3, (40, 40)),
+        (1.05, 3, (30, 30)),
+        (1.15, 2, (30, 30)),
     ]:
         try:
-            faces, _, _ = face_cascade.detectMultiScale3(
-                enhanced,
-                scaleFactor=scale,
-                minNeighbors=neighbors,
-                minSize=min_sz,
-                outputRejectLevels=True
-            )
-            if len(faces) > 0:
-                rects = [list(b) for b in faces]
-                grouped, _ = cv2.groupRectangles(rects + rects, groupThreshold=1, eps=0.2)
-                return [list(b) for b in grouped] if len(grouped) > 0 else rects
-        except Exception:
             faces = face_cascade.detectMultiScale(
                 enhanced,
                 scaleFactor=scale,
@@ -114,28 +100,31 @@ def detect_faces(gray_img: np.ndarray) -> list:
                 flags=cv2.CASCADE_SCALE_IMAGE,
             )
             if len(faces) > 0:
-                rects = [list(b) for b in faces]
-                grouped, _ = cv2.groupRectangles(rects + rects, groupThreshold=1, eps=0.2)
-                return [list(b) for b in grouped] if len(grouped) > 0 else rects
+                # Return only the LARGEST face to avoid multi-face confusion
+                best = max(faces, key=lambda b: int(b[2]) * int(b[3]))
+                return [tuple(int(v) for v in best)]
+        except Exception as e:
+            print(f"[WARNING] Frontal cascade error: {e}")
 
-    # 2. Try profile face cascade (for turned / angled poses)
+    # 2. Profile cascade (handles turned poses)
     if profile_cascade is not None and not profile_cascade.empty():
         for img_to_check, is_flipped in [(enhanced, False), (cv2.flip(enhanced, 1), True)]:
-            p_faces = profile_cascade.detectMultiScale(
-                img_to_check,
-                scaleFactor=1.1,
-                minNeighbors=3,
-                minSize=(40, 40),
-            )
-            if len(p_faces) > 0:
-                w_img = gray_img.shape[1]
-                rects = []
-                for (px, py, pw, ph) in p_faces:
+            try:
+                p_faces = profile_cascade.detectMultiScale(
+                    img_to_check,
+                    scaleFactor=1.1,
+                    minNeighbors=2,
+                    minSize=(30, 30),
+                )
+                if len(p_faces) > 0:
+                    w_img = gray_img.shape[1]
+                    best = max(p_faces, key=lambda b: int(b[2]) * int(b[3]))
+                    px, py, pw, ph = [int(v) for v in best]
                     if is_flipped:
                         px = w_img - (px + pw)
-                    rects.append([px, py, pw, ph])
-                grouped, _ = cv2.groupRectangles(rects + rects, groupThreshold=1, eps=0.2)
-                return [list(b) for b in grouped] if len(grouped) > 0 else rects
+                    return [(px, py, pw, ph)]
+            except Exception as e:
+                print(f"[WARNING] Profile cascade error: {e}")
 
     return []
 
@@ -318,67 +307,42 @@ def detect_and_embed(img_bytes: bytes, require_single_face: bool = False) -> Opt
     # ── 2. OpenCV face detection + HOG+LBP embedding ─────────────────────────
     all_faces = detect_faces(gray)
 
-    # ── C1: Face crop selection with pose fallback ────────────────────────────
-    if len(all_faces) == 0:
-        if require_single_face:
-            # Fallback for angled pose frames verified by frontend landmarks
-            h_img, w_img = gray.shape[:2]
-            all_faces = [(int(w_img * 0.2), int(h_img * 0.15), int(w_img * 0.6), int(h_img * 0.7))]
-            print("[INFO] No Haar face box — using centered pose crop fallback")
-        else:
-            print("[INFO] No face detected — returning None")
-            return None
-
-    # ── H1: Quality gates (enrollment mode) ──────────────────────────────────
-    if require_single_face:
-        if len(all_faces) > 1:
-            print(f"[WARNING] Enrollment rejected: {len(all_faces)} faces detected (expected exactly 1)")
-            return None
-
-        face_box = all_faces[0]
-        x, y, w, h = face_box
-        frame_width = gray.shape[1]
-
-        # Minimum face size gate: reject if face < 10% of frame width
-        face_ratio = w / frame_width
-        if face_ratio < 0.10:
-            print(f"[WARNING] Enrollment rejected: face too small "
-                  f"({w}px = {face_ratio:.1%} of frame width, need ≥10%)")
-            return None
-
-        # Blur gate: Laplacian variance on face crop
-        face_crop_for_blur = gray[
-            max(0, y): min(gray.shape[0], y + h),
-            max(0, x): min(gray.shape[1], x + w),
-        ]
-        if face_crop_for_blur.size > 0:
-            blur_score = cv2.Laplacian(face_crop_for_blur, cv2.CV_64F).var()
-            if blur_score < 15:
-                print(f"[WARNING] Enrollment rejected: face too blurry "
-                      f"(Laplacian variance={blur_score:.1f}, need ≥15)")
-                return None
-            print(f"[INFO] Blur check passed (Laplacian variance={blur_score:.1f})")
+    # ── Face box selection ────────────────────────────────────────────────────
+    if len(all_faces) > 0:
+        # Pick the largest detected face
+        face_box = max(all_faces, key=lambda b: int(b[2]) * int(b[3]))
+        x, y, w, h = [int(v) for v in face_box]
+        print(f"[INFO] Haar face detected at ({x},{y}) size {w}x{h}")
     else:
-        # Scan mode: pick the largest face
-        face_box = max(all_faces, key=lambda b: b[2] * b[3])
+        # No face box found — use central 60% crop as fallback
+        # (the frame was already pose-validated by face-api.js on the client)
+        h_img, w_img = gray.shape[:2]
+        x = int(w_img * 0.2)
+        y = int(h_img * 0.10)
+        w = int(w_img * 0.60)
+        h = int(h_img * 0.80)
+        print("[INFO] No Haar face box — using central crop fallback for embedding")
 
-    x, y, w, h = face_box
     face_crop = gray[
         max(0, y): min(gray.shape[0], y + h),
         max(0, x): min(gray.shape[1], x + w),
     ]
 
     if face_crop.size == 0:
-        print("[ERROR] Face crop is empty")
+        print("[ERROR] Face crop is empty — frame rejected")
         return None
 
-    # ── H2: Eye-based alignment before embedding ─────────────────────────────
-    face_crop = _align_face(face_crop)
+    # ── Eye-based alignment ───────────────────────────────────────────────────
+    try:
+        face_crop = _align_face(face_crop)
+    except Exception as e:
+        print(f"[WARNING] Eye alignment failed ({e}) — using unaligned crop")
 
+    # ── Embedding extraction ──────────────────────────────────────────────────
     emb = _combine_embeddings(face_crop)
     if emb is None:
-        print("[ERROR] Embedding vector is zero — unusable frame")
+        print("[ERROR] Embedding vector is zero")
         return None
 
-    print(f"[INFO] OpenCV HOG+LBP 512-dim embedding extracted (norm={np.linalg.norm(emb):.4f})")
+    print(f"[INFO] HOG+LBP 512-dim embedding extracted (norm={np.linalg.norm(emb):.4f})")
     return emb

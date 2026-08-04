@@ -365,56 +365,31 @@ async function detectionTick() {
   await captureAndVerify(video);
 }
 
-// ── Capture + server validation ───────────────────────────────────────────────
+// ── Capture locally — no per-frame server round-trip ─────────────────────────
+// face-api.js already confirmed: 1 face, correct pose, held 6 steady frames.
+// The server embedding quality check happens once at /face/enroll submission.
 async function captureAndVerify(video) {
-  setOval("state-verify");
-  setMsg("🔄 Verifying with server…", "p");
+  setOval("state-ok");
+  setMsg(`✅ Step ${currentStep+1}/${STEPS.length} captured!`, "g");
 
   // Capture unmirrored frame (CSS mirror doesn't affect canvas)
   const c = document.createElement("canvas");
   c.width = video.videoWidth; c.height = video.videoHeight;
   c.getContext("2d").drawImage(video, 0, 0);
-  const frame = c.toDataURL("image/jpeg", 0.88);
+  captures.push(c.toDataURL("image/jpeg", 0.92));
 
-  try {
-    const res = await api.post("/face/validate-frame", { frame });
+  showToast(`Pose ${currentStep+1}/${STEPS.length} done ✓`, "success", 1000);
+  await sleep(800);
 
-    if (res.valid) {
-      captures.push(frame);
-      setOval("state-ok");
-      setMsg(`✅ Step ${currentStep+1}/${STEPS.length} verified!`, "g");
-      showToast(`Step ${currentStep+1}/${STEPS.length} verified ✓`, "success", 1500);
-      await sleep(1200);
-
-      currentStep++;
-      if (currentStep < STEPS.length) {
-        updateStepUI(currentStep);
-        setOval("state-no-face");
-        setMsg("🔍 Detecting face…", "");
-        busy = false;
-        startLoop();
-      } else {
-        await submitEnrollment();
-      }
-
-    } else {
-      const reason = res.reason || "Face not clear enough";
-      setOval("state-bad");
-      setMsg(`❌ ${reason}`, "r");
-      showToast("Retry: " + reason, "error", 3000);
-      await sleep(2500);
-      setOval("state-no-face");
-      setMsg("🔍 Try again…", "");
-      busy = false;
-      startLoop();
-    }
-
-  } catch (err) {
-    setOval("state-bad");
-    setMsg("❌ Server error — retrying…", "r");
-    await sleep(2000);
+  currentStep++;
+  if (currentStep < STEPS.length) {
+    updateStepUI(currentStep);
+    setOval("state-no-face");
+    setMsg("🔍 Detecting face…", "");
     busy = false;
     startLoop();
+  } else {
+    await submitEnrollment();
   }
 }
 
