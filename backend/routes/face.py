@@ -8,15 +8,15 @@ from models import User, Course
 
 face_bp = Blueprint("face", __name__)
 
-# ── Per-frame Validation (used by smart enrollment UI) ────────────────────────
+# ── Per-frame Validation ───────────────────────────────────────────────────────
 
 @face_bp.post("/validate-frame")
 @jwt_required()
 def validate_frame():
     """
     Validate a single frame for face enrollment quality.
-    The frontend calls this after each capture step so the user gets
-    immediate feedback — no more "steps done but enrollment failed."
+    Called by the frontend after each MediaPipe-gated capture so the user gets
+    server-side confirmation before the step is marked done.
     Body: { "frame": "data:image/jpeg;base64,..." }
     Returns: { "valid": true } or { "valid": false, "reason": "..." }
     """
@@ -50,11 +50,12 @@ def validate_frame():
             return jsonify({
                 "valid": False,
                 "reason": "No clear face detected. Make sure your face is centered, "
-                          "well-lit, in focus, and you are the only person in the frame."
+                          "well-lit, in focus, and you are the only person in frame."
             }), 200
     except Exception as e:
         print(f"[ERROR] validate-frame: {e}")
         return jsonify({"valid": False, "reason": "Server error during validation"}), 500
+
 
 # ── Enrollment ────────────────────────────────────────────────────────────────
 
@@ -62,17 +63,21 @@ def validate_frame():
 @jwt_required()
 def enroll():
     """
-    Receive 5 Base64-encoded frame captures, extract embeddings,
-    average them into one master embedding, and save to DB.
+    Receive 5 Base64-encoded frame captures (one per pose), extract embeddings,
+    and store them individually as a JSON array-of-arrays.
+
+    Each frame has already been validated client-side (MediaPipe pose gate)
+    and by /validate-frame. This endpoint does a final server-side quality check
+    and stores all embeddings that pass (minimum 3 required).
+
     Body: { "frames": ["data:image/jpeg;base64,...", ...] }
-    Tolerant: succeeds as long as at least 3 of 5 frames produce a valid embedding.
     """
     identity = get_jwt_identity()
     student = User.query.filter_by(id=identity["id"], type="student").first()
     if not student:
         return jsonify({"error": "Student not found"}), 404
 
-    data   = request.get_json(silent=True)
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body missing or invalid JSON"}), 400
 
@@ -85,93 +90,43 @@ def enroll():
     except ImportError as e:
         return jsonify({"error": f"ML module not available: {e}"}), 500
 
-    embeddings   = []
-    failed_steps = []
+    # ── Extract one embedding per pose frame ──────────────────────────────────
+    pose_embeddings = []  # list of lists — one per successfully processed frame
+    failed_steps    = []
 
     for idx, frame_b64 in enumerate(frames):
         try:
-            # Strip data URL prefix if present
             if "," in frame_b64:
                 frame_b64 = frame_b64.split(",", 1)[1]
-
-            # Validate base64 padding
             missing_padding = len(frame_b64) % 4
             if missing_padding:
                 frame_b64 += "=" * (4 - missing_padding)
-
             img_bytes = base64.b64decode(frame_b64)
             embedding = detect_and_embed(img_bytes, require_single_face=True)
 
             if embedding is not None:
-                embeddings.append(embedding)
-                print(f"[INFO] Step {idx+1}: embedding extracted (dim={len(embedding)})")
+                pose_embeddings.append(embedding.tolist())
+                print(f"[INFO] Step {idx+1}: pose embedding extracted (dim={len(embedding)})")
             else:
                 failed_steps.append(idx + 1)
-                print(f"[WARNING] Step {idx+1}: no face detected — skipping this frame")
+                print(f"[WARNING] Step {idx+1}: no face detected — skipping")
 
         except Exception as e:
             failed_steps.append(idx + 1)
             print(f"[WARNING] Step {idx+1}: processing error — {e}")
 
-    if len(embeddings) < 3:
+    if len(pose_embeddings) < 3:
         return jsonify({
             "error": (
-                f"Only {len(embeddings)}/5 frames produced a usable face. "
+                f"Only {len(pose_embeddings)}/{len(frames)} frames produced a usable face. "
                 f"Failed steps: {failed_steps}. "
-                "Please retry in a brighter area and keep your face within the oval."
+                "Please retry in a brighter area and keep your face clearly visible."
             )
         }), 422
 
-    # ── H3: Outlier rejection before averaging ───────────────────────────────
-    # Compute pairwise cosine similarity; drop embeddings whose average
-    # similarity to the rest falls below the threshold.
-    _OUTLIER_THRESHOLD = 0.55
-    if len(embeddings) > 3:
-        emb_stack = np.array(embeddings)  # shape (N, 512)
-        # Normalize rows (should already be normalized, but be safe)
-        norms = np.linalg.norm(emb_stack, axis=1, keepdims=True) + 1e-9
-        emb_normed = emb_stack / norms
-        # Pairwise cosine similarity matrix
-        sim_matrix = emb_normed @ emb_normed.T  # (N, N)
-        n = len(embeddings)
-        avg_sims = []
-        for i in range(n):
-            # Average similarity to all OTHER embeddings
-            others = [sim_matrix[i][j] for j in range(n) if j != i]
-            avg_sims.append(float(np.mean(others)))
-
-        # Keep only embeddings above the threshold
-        kept = []
-        dropped_indices = []
-        for i, (emb, avg_sim) in enumerate(zip(embeddings, avg_sims)):
-            if avg_sim >= _OUTLIER_THRESHOLD:
-                kept.append(emb)
-            else:
-                dropped_indices.append(i)
-                print(f"[INFO] Outlier embedding dropped (index={i}, avg_sim={avg_sim:.3f})")
-
-        if len(kept) < 3:
-            return jsonify({
-                "error": (
-                    f"Too many inconsistent frames — only {len(kept)} of "
-                    f"{len(embeddings)} passed consistency check. "
-                    "Please retry with a steadier head position and good lighting."
-                )
-            }), 422
-
-        print(f"[INFO] Outlier rejection: kept {len(kept)}/{len(embeddings)} embeddings "
-              f"(dropped indices: {dropped_indices})")
-        embeddings = kept
-
-    # Average and re-normalize
-    master = np.mean(embeddings, axis=0).astype(np.float32)
-    norm   = np.linalg.norm(master)
-    if norm < 1e-7:
-        return jsonify({"error": "Embedding computation failed — all frames were too similar or blank"}), 500
-
-    master = master / norm
-
-    student.face_embedding = json.dumps(master.tolist())
+    # ── Store all pose embeddings as JSON array-of-arrays ─────────────────────
+    # Format: [[emb_pose1], [emb_pose2], ...] — each sub-list is a 512-dim float list
+    student.face_embedding = json.dumps(pose_embeddings)
     try:
         db.session.commit()
     except Exception as e:
@@ -179,12 +134,12 @@ def enroll():
         print(f"[ERROR] Database commit failed: {e}")
         return jsonify({"error": "Database error — could not save face embedding. Please try again."}), 500
 
-    print(f"[SUCCESS] Saved 512-dim face embedding for {student.username} (id={student.id}). "
-          f"Used {len(embeddings)}/5 frames, skipped steps {failed_steps}.")
+    print(f"[SUCCESS] Saved {len(pose_embeddings)} pose embeddings for "
+          f"{student.username} (id={student.id}). Skipped steps: {failed_steps}.")
 
     return jsonify({
         "message": "Face enrolled successfully",
-        "frames_used": len(embeddings),
+        "poses_stored": len(pose_embeddings),
         "frames_total": len(frames),
         "skipped_steps": failed_steps,
     }), 200
@@ -198,6 +153,8 @@ def scan():
     """
     Receive a single Base64 frame, detect all faces, match against
     enrolled students in the given course.
+    Supports both the new multi-pose embedding format (list-of-lists)
+    and the old single-vector format (flat list) for backwards compatibility.
     Body: { "frame": "data:image/jpeg;base64,...", "course_id": 1 }
     Returns: { "matches": [{ student_id, name, sid, confidence, bbox }] }
     """
@@ -223,16 +180,23 @@ def scan():
     if not course:
         return jsonify({"error": "Course not found"}), 404
 
+    # ── Load enrolled students, supporting both embedding formats ─────────────
     enrolled = []
     for s in course.students:
         if s.face_embedding:
             try:
-                emb = np.array(json.loads(s.face_embedding), dtype=np.float32)
+                raw = json.loads(s.face_embedding)
+                # list-of-lists = new multi-pose format; flat list = old single-vector
+                if raw and isinstance(raw[0], list):
+                    embeddings = [np.array(e, dtype=np.float32) for e in raw]
+                else:
+                    embeddings = [np.array(raw, dtype=np.float32)]
+
                 enrolled.append({
                     "student_id": s.id,
                     "sid":        s.student_id,
                     "name":       s.username,
-                    "embedding":  emb,
+                    "embeddings": embeddings,   # list of np.ndarray (1 old or N new)
                 })
             except Exception:
                 pass
