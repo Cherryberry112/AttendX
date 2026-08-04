@@ -5,39 +5,8 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from __init__ import db
 from models import User, Course
-from sqlalchemy import text
 
 face_bp = Blueprint("face", __name__)
-
-
-def _ensure_text_column():
-    """
-    Run once on first request: ALTER face_embedding from vector(512) to TEXT
-    so we can store JSON arrays. Safe to call repeatedly (no-op if already TEXT).
-    """
-    try:
-        result = db.session.execute(text(
-            "SELECT data_type FROM information_schema.columns "
-            "WHERE table_name='users' AND column_name='face_embedding'"
-        )).fetchone()
-        if result and result[0] != 'text':
-            db.session.execute(text(
-                "ALTER TABLE users ALTER COLUMN face_embedding TYPE TEXT "
-                "USING face_embedding::text"
-            ))
-            db.session.commit()
-            print("[MIGRATION] face_embedding column converted to TEXT")
-    except Exception as e:
-        db.session.rollback()
-        print(f"[MIGRATION WARNING] Could not alter face_embedding: {e}")
-
-
-@face_bp.before_app_request
-def _run_migration_once():
-    """Ensure the column type is correct on first request."""
-    _ensure_text_column()
-    # Only run once by unregistering itself
-    face_bp.before_app_request_funcs.clear()
 
 
 # ── Per-frame Validation ───────────────────────────────────────────────────────
