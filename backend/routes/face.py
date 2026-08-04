@@ -42,7 +42,7 @@ def validate_frame():
 
     try:
         from ml.face_detector import detect_and_embed
-        embedding = detect_and_embed(img_bytes, require_single_face=True)
+        embedding = detect_and_embed(img_bytes, require_single_face=False)
 
         if embedding is not None:
             return jsonify({"valid": True}), 200
@@ -105,7 +105,7 @@ def enroll():
             if missing_padding:
                 frame_b64 += "=" * (4 - missing_padding)
             img_bytes = base64.b64decode(frame_b64)
-            embedding = detect_and_embed(img_bytes, require_single_face=True)
+            embedding = detect_and_embed(img_bytes, require_single_face=False)
 
             if embedding is not None:
                 pose_embeddings.append(embedding.tolist())

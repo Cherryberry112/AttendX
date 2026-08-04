@@ -76,7 +76,8 @@ def _get_cascades():
 def detect_faces(gray_img: np.ndarray) -> list:
     """
     Detect all faces in a grayscale image using frontal + profile Haar cascades.
-    Returns list of (x, y, w, h) bounding boxes, or [] if no faces found.
+    Applies rectangle grouping to merge duplicate overlapping boxes for a single face.
+    Returns list of (x, y, w, h) bounding boxes.
     """
     face_cascade, profile_cascade, _ = _get_cascades()
 
@@ -84,24 +85,38 @@ def detect_faces(gray_img: np.ndarray) -> list:
         print("[WARNING] Haar face cascade not available")
         return []
 
-    # Preprocess: equalize histogram for better detection in varied lighting
     enhanced = cv2.equalizeHist(gray_img)
 
-    # 1. Try frontal face cascade
+    # 1. Try frontal face cascade with grouping
     for scale, neighbors, min_sz in [
-        (1.05, 3, (50, 50)),
         (1.1,  4, (40, 40)),
+        (1.05, 4, (50, 50)),
         (1.15, 3, (30, 30)),
     ]:
-        faces = face_cascade.detectMultiScale(
-            enhanced,
-            scaleFactor=scale,
-            minNeighbors=neighbors,
-            minSize=min_sz,
-            flags=cv2.CASCADE_SCALE_IMAGE,
-        )
-        if len(faces) > 0:
-            return list(faces)
+        try:
+            faces, _, _ = face_cascade.detectMultiScale3(
+                enhanced,
+                scaleFactor=scale,
+                minNeighbors=neighbors,
+                minSize=min_sz,
+                outputRejectLevels=True
+            )
+            if len(faces) > 0:
+                rects = [list(b) for b in faces]
+                grouped, _ = cv2.groupRectangles(rects + rects, groupThreshold=1, eps=0.2)
+                return [list(b) for b in grouped] if len(grouped) > 0 else rects
+        except Exception:
+            faces = face_cascade.detectMultiScale(
+                enhanced,
+                scaleFactor=scale,
+                minNeighbors=neighbors,
+                minSize=min_sz,
+                flags=cv2.CASCADE_SCALE_IMAGE,
+            )
+            if len(faces) > 0:
+                rects = [list(b) for b in faces]
+                grouped, _ = cv2.groupRectangles(rects + rects, groupThreshold=1, eps=0.2)
+                return [list(b) for b in grouped] if len(grouped) > 0 else rects
 
     # 2. Try profile face cascade (for turned / angled poses)
     if profile_cascade is not None and not profile_cascade.empty():
@@ -113,13 +128,14 @@ def detect_faces(gray_img: np.ndarray) -> list:
                 minSize=(40, 40),
             )
             if len(p_faces) > 0:
-                results = []
                 w_img = gray_img.shape[1]
+                rects = []
                 for (px, py, pw, ph) in p_faces:
                     if is_flipped:
                         px = w_img - (px + pw)
-                    results.append((px, py, pw, ph))
-                return results
+                    rects.append([px, py, pw, ph])
+                grouped, _ = cv2.groupRectangles(rects + rects, groupThreshold=1, eps=0.2)
+                return [list(b) for b in grouped] if len(grouped) > 0 else rects
 
     return []
 
