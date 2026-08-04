@@ -53,8 +53,11 @@ def validate_frame():
                           "well-lit, in focus, and you are the only person in frame."
             }), 200
     except Exception as e:
-        print(f"[ERROR] validate-frame: {e}")
-        return jsonify({"valid": False, "reason": "Server error during validation"}), 500
+        print(f"[ERROR] validate-frame exception: {e}")
+        return jsonify({
+            "valid": False,
+            "reason": "Frame verification temporary error. Please hold steady."
+        }), 200
 
 
 # ── Enrollment ────────────────────────────────────────────────────────────────

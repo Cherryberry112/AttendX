@@ -15,9 +15,11 @@ Shared functions exported for use by face_matcher.py:
   - _align_face()        — eye-based rotation alignment
   - _combine_embeddings()— HOG+LBP 512-dim embedding
 """
+from __future__ import annotations
 import os
 import cv2
 import numpy as np
+from typing import Optional
 
 # ── InsightFace (disabled on free-tier / Render by default) ──────────────────
 # Only enabled if ENABLE_INSIGHTFACE=1 env var is set AND package is installed.
@@ -248,7 +250,7 @@ def _combine_embeddings(gray_crop: np.ndarray) -> np.ndarray:
 
 # ── Main detection function ───────────────────────────────────────────────────
 
-def detect_and_embed(img_bytes: bytes, require_single_face: bool = False) -> np.ndarray | None:
+def detect_and_embed(img_bytes: bytes, require_single_face: bool = False) -> Optional[np.ndarray]:
     """
     Given raw JPEG/PNG bytes, detect the largest face and return a 512-dim
     normalized embedding, or None if no face found / image too dark / quality
