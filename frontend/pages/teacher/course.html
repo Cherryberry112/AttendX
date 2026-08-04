@@ -24,7 +24,9 @@
       position:absolute; top:0; left:0; width:100%; height:100%;
       object-fit:cover;
     }
-    .cam-wrap canvas { pointer-events:none; }
+    .cam-wrap canvas { pointer-events:none; z-index:2; }
+    /* hide video — canvas is the live display */
+    .cam-wrap video  { display:none; }
 
     /* status badge overlaid on camera */
     .cam-status {
@@ -265,6 +267,8 @@
   let courseData   = null;
   let stream       = null;
   let scanInterval = null;
+  let videoRafId   = null;   // requestAnimationFrame id for continuous video draw
+  let scanOverlays = [];     // last detection bboxes — redrawn every frame
   let scanning     = false;
   let facingMode   = "environment"; // start with back camera
   let draftRecords = {};
@@ -379,7 +383,6 @@
   // ── Camera ────────────────────────────────────────────────────
   async function startCamera() {
     try {
-      // Try requested facing mode, fall back to any camera
       const constraints = {
         video: { facingMode: { ideal: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } },
         audio: false,
@@ -387,12 +390,35 @@
       try {
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (_) {
-        // Browser may not support facingMode — fall back to any camera
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       }
 
-      const video = document.getElementById("cameraFeed");
+      const video  = document.getElementById("cameraFeed");
+      const canvas = document.getElementById("cameraCanvas");
       video.srcObject = stream;
+      await new Promise(r => { video.onloadedmetadata = r; });
+      canvas.width  = video.videoWidth  || 640;
+      canvas.height = video.videoHeight || 480;
+
+      // Start continuous smooth video render loop (30fps)
+      function renderLoop() {
+        if (!stream) return;
+        const ctx = canvas.getContext("2d");
+        canvas.width  = video.videoWidth  || canvas.width;
+        canvas.height = video.videoHeight || canvas.height;
+        // Draw live video
+        if (facingMode === "user") {
+          ctx.save(); ctx.scale(-1, 1); ctx.drawImage(video, -canvas.width, 0); ctx.restore();
+        } else {
+          ctx.drawImage(video, 0, 0);
+        }
+        // Re-draw last detection overlays on top
+        drawOverlays(ctx, canvas);
+        videoRafId = requestAnimationFrame(renderLoop);
+      }
+      if (videoRafId) cancelAnimationFrame(videoRafId);
+      renderLoop();
+
       document.getElementById("startBtn").classList.add("hidden");
       document.getElementById("flipBtn").classList.remove("hidden");
       document.getElementById("startScanBtn").classList.remove("hidden");
@@ -445,74 +471,61 @@
     }
   }
 
+  // ── Draw stored overlays on top of live video ─────────────────
+  function drawOverlays(ctx, canvas) {
+    scanOverlays.forEach(m => {
+      let [x1, y1, x2, y2] = m.bbox;
+      if (facingMode === "user") {
+        const tmp = canvas.width - x2; x2 = canvas.width - x1; x1 = tmp;
+      }
+      const matched = m.student_id !== null;
+      ctx.strokeStyle = matched ? "#0F9B58" : "#ff4d6d";
+      ctx.lineWidth   = 3;
+      ctx.shadowColor = matched ? "#0F9B58" : "#ff4d6d";
+      ctx.shadowBlur  = 8;
+      ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+      ctx.shadowBlur  = 0;
+      const label = matched ? m.name : "Unknown";
+      ctx.font      = "bold 14px Inter, sans-serif";
+      const tw      = ctx.measureText(label).width;
+      const lx      = Math.max(x1, 2);
+      const ly      = Math.max(y1 - 22, 2);
+      ctx.fillStyle = matched ? "rgba(15,155,88,0.85)" : "rgba(255,77,109,0.85)";
+      ctx.fillRect(lx, ly, tw + 10, 20);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(label, lx + 5, ly + 14);
+      if (matched && m.confidence) {
+        ctx.fillStyle = "rgba(0,0,0,0.6)";
+        ctx.font = "11px Inter";
+        ctx.fillText((m.confidence * 100).toFixed(0) + "%", x1 + 4, y2 - 4);
+      }
+    });
+  }
+
   async function captureAndScan() {
     const video  = document.getElementById("cameraFeed");
     const canvas = document.getElementById("cameraCanvas");
     if (!video.videoWidth) return;
 
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    // Mirror horizontally only for front camera display
+    // Capture current frame for API
+    const offscreen = document.createElement("canvas");
+    offscreen.width  = video.videoWidth;
+    offscreen.height = video.videoHeight;
+    const octx = offscreen.getContext("2d");
     if (facingMode === "user") {
-      ctx.save();
-      ctx.scale(-1, 1);
-      ctx.drawImage(video, -canvas.width, 0);
-      ctx.restore();
+      octx.save(); octx.scale(-1, 1); octx.drawImage(video, -offscreen.width, 0); octx.restore();
     } else {
-      ctx.drawImage(video, 0, 0);
+      octx.drawImage(video, 0, 0);
     }
-    const frame = canvas.toDataURL("image/jpeg", 0.85);
-
-    // Clear previous overlays
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    if (facingMode === "user") {
-      ctx.save(); ctx.scale(-1, 1); ctx.drawImage(video, -canvas.width, 0); ctx.restore();
-    } else {
-      ctx.drawImage(video, 0, 0);
-    }
+    const frame = offscreen.toDataURL("image/jpeg", 0.85);
 
     try {
       const res = await api.post("/face/scan", { frame, course_id: courseId });
+      scanOverlays = res.matches || [];  // store for continuous render loop
       let matchedNames = [];
 
       res.matches.forEach(m => {
-        let [x1, y1, x2, y2] = m.bbox;
-        // Mirror bbox x-coords for front camera
-        if (facingMode === "user") {
-          const tmp = canvas.width - x2;
-          x2 = canvas.width - x1;
-          x1 = tmp;
-        }
-        const matched = m.student_id !== null;
-
-        // Draw bounding box
-        ctx.strokeStyle = matched ? "#0F9B58" : "#ff4d6d";
-        ctx.lineWidth   = 3;
-        ctx.shadowColor = matched ? "#0F9B58" : "#ff4d6d";
-        ctx.shadowBlur  = 8;
-        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-        ctx.shadowBlur = 0;
-
-        // Draw label background
-        const label    = matched ? m.name : "Unknown";
-        ctx.font       = "bold 14px Inter, sans-serif";
-        const tw       = ctx.measureText(label).width;
-        const lx       = Math.max(x1, 2);
-        const ly       = Math.max(y1 - 22, 2);
-        ctx.fillStyle  = matched ? "rgba(15,155,88,0.85)" : "rgba(255,77,109,0.85)";
-        ctx.fillRect(lx, ly, tw + 10, 20);
-        ctx.fillStyle  = "#fff";
-        ctx.fillText(label, lx + 5, ly + 14);
-
-        // Draw confidence
-        if (matched && m.confidence) {
-          ctx.fillStyle = "rgba(0,0,0,0.6)";
-          ctx.font = "11px Inter";
-          ctx.fillText((m.confidence * 100).toFixed(0) + "%", x1 + 4, y2 - 4);
-        }
-
-        if (matched && draftRecords[m.student_id]) {
+        if (m.student_id !== null && draftRecords[m.student_id]) {
           draftRecords[m.student_id].present    = true;
           draftRecords[m.student_id].confidence = m.confidence;
           matchedNames.push(m.name);
@@ -521,14 +534,12 @@
 
       renderDraft();
 
-      // Show match badge
       const badge = document.getElementById("matchBadge");
       if (matchedNames.length) {
         badge.textContent = "✓ " + matchedNames.join(", ");
         badge.style.display = "block";
         setTimeout(() => { badge.style.display = "none"; }, 2000);
       }
-
     } catch (err) {
       console.warn("Scan error:", err.message);
     }
@@ -536,7 +547,9 @@
 
   function stopCamera() {
     clearInterval(scanInterval);
+    if (videoRafId) { cancelAnimationFrame(videoRafId); videoRafId = null; }
     scanning = false;
+    scanOverlays = [];
     if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
     const canvas = document.getElementById("cameraCanvas");
     canvas.getContext("2d").clearRect(0, 0, canvas.width, canvas.height);

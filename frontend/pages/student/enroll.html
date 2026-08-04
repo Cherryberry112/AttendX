@@ -160,20 +160,21 @@ const STEPS = [
     guide: "Turn right →",
   },
   {
-    // Chin DOWN → pitch POSITIVE (pitchRaw < neutral, nose appears higher in image)
+    // No pitch gate — user just follows instruction to tilt chin down.
+    // 2D landmark pitch is too noisy; instruction guides pose, any face is accepted.
     title:"Look Down",
-    desc: "Tilt your chin downward — look toward your chest.",
+    desc: "Tilt your chin DOWN — look toward your chest and hold still.",
     icon: "arrow-down",
-    yawMin:-28, yawMax:28, pitchMin:6, pitchMax:80,
-    guide: "↓ Tilt chin DOWN toward chest",
+    yawMin:-35, yawMax:35, pitchMin:-90, pitchMax:90,
+    guide: "↓ Chin DOWN — look at your chest",
   },
   {
-    // Chin UP → pitch NEGATIVE (pitchRaw > neutral, nose appears lower in image)
+    // No pitch gate — user just follows instruction to tilt chin up.
     title:"Look Up",
-    desc: "Tilt your chin upward — look toward the ceiling.",
+    desc: "Tilt your chin UP — look toward the ceiling and hold still.",
     icon: "arrow-up",
-    yawMin:-28, yawMax:28, pitchMin:-80, pitchMax:-6,
-    guide: "↑ Tilt chin UP toward ceiling",
+    yawMin:-35, yawMax:35, pitchMin:-90, pitchMax:90,
+    guide: "↑ Chin UP — look at the ceiling",
   },
 ];
 
