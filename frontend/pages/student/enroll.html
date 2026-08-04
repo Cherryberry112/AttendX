@@ -160,20 +160,20 @@ const STEPS = [
     guide: "Turn right →",
   },
   {
-    // Chin UP → pitch NEGATIVE (pitchRaw > neutral, nose appears lower)
+    // Chin DOWN → pitch POSITIVE (pitchRaw < neutral, nose appears higher in image)
+    title:"Look Down",
+    desc: "Tilt your chin downward — look toward your chest.",
+    icon: "arrow-down",
+    yawMin:-28, yawMax:28, pitchMin:6, pitchMax:80,
+    guide: "↓ Tilt chin DOWN toward chest",
+  },
+  {
+    // Chin UP → pitch NEGATIVE (pitchRaw > neutral, nose appears lower in image)
     title:"Look Up",
     desc: "Tilt your chin upward — look toward the ceiling.",
     icon: "arrow-up",
     yawMin:-28, yawMax:28, pitchMin:-80, pitchMax:-6,
     guide: "↑ Tilt chin UP toward ceiling",
-  },
-  {
-    // Chin DOWN → pitch POSITIVE (pitchRaw < neutral, nose appears higher)
-    title:"Look Down",
-    desc: "Tilt your chin downward — look toward your chest.",
-    icon: "arrow-up-down",
-    yawMin:-28, yawMax:28, pitchMin:6, pitchMax:80,
-    guide: "↓ Tilt chin DOWN toward chest",
   },
 ];
 
@@ -182,7 +182,7 @@ const MODEL_URLS = [
   "https://justadudewhohacks.github.io/face-api.js/models",
   "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights"
 ];
-const HOLD_FRAMES = 3;    // 3 frames ~0.2s at 15fps — fast & responsive
+const HOLD_FRAMES = 8;    // ~0.5s at 15fps — steady but not frustrating
 const LOOP_MS     = 66;   // ~15fps
 
 // ── State ─────────────────────────────────────────────────────────────────────

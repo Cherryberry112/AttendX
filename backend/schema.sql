@@ -36,7 +36,7 @@ CREATE TABLE users (
     phone            TEXT,
     username         TEXT NOT NULL,
     password         TEXT NOT NULL,                 -- bcrypt hash
-    face_embedding   vector(512),                  -- InsightFace ArcFace (NULL for teacher/admin)
+    face_embedding   TEXT,                             -- JSON array of pose embeddings (NULL for teacher/admin)
     guardian_number  TEXT,                          -- parent/guardian phone (NULL for teacher/admin)
     created_at       TIMESTAMPTZ DEFAULT NOW()
 );
