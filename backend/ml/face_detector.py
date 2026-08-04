@@ -308,9 +308,9 @@ def detect_and_embed(img_bytes: bytes, require_single_face: bool = False) -> np.
         ]
         if face_crop_for_blur.size > 0:
             blur_score = cv2.Laplacian(face_crop_for_blur, cv2.CV_64F).var()
-            if blur_score < 55:
+            if blur_score < 35:
                 print(f"[WARNING] Enrollment rejected: face too blurry "
-                      f"(Laplacian variance={blur_score:.1f}, need ≥55)")
+                      f"(Laplacian variance={blur_score:.1f}, need ≥35)")
                 return None
             print(f"[INFO] Blur check passed (Laplacian variance={blur_score:.1f})")
     else:

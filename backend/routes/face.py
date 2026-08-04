@@ -8,6 +8,54 @@ from models import User, Course
 
 face_bp = Blueprint("face", __name__)
 
+# ── Per-frame Validation (used by smart enrollment UI) ────────────────────────
+
+@face_bp.post("/validate-frame")
+@jwt_required()
+def validate_frame():
+    """
+    Validate a single frame for face enrollment quality.
+    The frontend calls this after each capture step so the user gets
+    immediate feedback — no more "steps done but enrollment failed."
+    Body: { "frame": "data:image/jpeg;base64,..." }
+    Returns: { "valid": true } or { "valid": false, "reason": "..." }
+    """
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"valid": False, "reason": "Invalid request"}), 400
+
+    frame_b64 = data.get("frame", "")
+    if not frame_b64:
+        return jsonify({"valid": False, "reason": "No frame provided"}), 400
+
+    if "," in frame_b64:
+        frame_b64 = frame_b64.split(",", 1)[1]
+
+    missing_padding = len(frame_b64) % 4
+    if missing_padding:
+        frame_b64 += "=" * (4 - missing_padding)
+
+    try:
+        img_bytes = base64.b64decode(frame_b64)
+    except Exception:
+        return jsonify({"valid": False, "reason": "Invalid image data"}), 400
+
+    try:
+        from ml.face_detector import detect_and_embed
+        embedding = detect_and_embed(img_bytes, require_single_face=True)
+
+        if embedding is not None:
+            return jsonify({"valid": True}), 200
+        else:
+            return jsonify({
+                "valid": False,
+                "reason": "No clear face detected. Make sure your face is centered, "
+                          "well-lit, in focus, and you are the only person in the frame."
+            }), 200
+    except Exception as e:
+        print(f"[ERROR] validate-frame: {e}")
+        return jsonify({"valid": False, "reason": "Server error during validation"}), 500
+
 # ── Enrollment ────────────────────────────────────────────────────────────────
 
 @face_bp.post("/enroll")
