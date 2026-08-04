@@ -45,34 +45,38 @@ def _get_insightface_app():
 
 
 # ── OpenCV face cascade (always available) ────────────────────────────────────
-_face_cascade = None
-_eye_cascade  = None
+_face_cascade    = None
+_profile_cascade = None
+_eye_cascade     = None
 
 def _get_cascades():
-    global _face_cascade, _eye_cascade
+    global _face_cascade, _profile_cascade, _eye_cascade
     if _face_cascade is None:
         try:
             _face_cascade = cv2.CascadeClassifier(
                 cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
             )
+            _profile_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + "haarcascade_profileface.xml"
+            )
             _eye_cascade = cv2.CascadeClassifier(
                 cv2.data.haarcascades + "haarcascade_eye.xml"
             )
         except Exception:
-            _face_cascade = None
-            _eye_cascade  = None
-    return _face_cascade, _eye_cascade
+            _face_cascade    = None
+            _profile_cascade = None
+            _eye_cascade     = None
+    return _face_cascade, _profile_cascade, _eye_cascade
 
 
 # ── Shared face detection (M1 — single source of truth) ──────────────────────
 
 def detect_faces(gray_img: np.ndarray) -> list:
     """
-    Detect all faces in a grayscale image using Haar cascade.
+    Detect all faces in a grayscale image using frontal + profile Haar cascades.
     Returns list of (x, y, w, h) bounding boxes, or [] if no faces found.
-    NO fallback — if Haar finds nothing, returns empty list.
     """
-    face_cascade, _ = _get_cascades()
+    face_cascade, profile_cascade, _ = _get_cascades()
 
     if face_cascade is None or face_cascade.empty():
         print("[WARNING] Haar face cascade not available")
@@ -81,7 +85,7 @@ def detect_faces(gray_img: np.ndarray) -> list:
     # Preprocess: equalize histogram for better detection in varied lighting
     enhanced = cv2.equalizeHist(gray_img)
 
-    # Try with multiple scale factors (more robust detection)
+    # 1. Try frontal face cascade
     for scale, neighbors, min_sz in [
         (1.05, 3, (50, 50)),
         (1.1,  4, (40, 40)),
@@ -96,6 +100,24 @@ def detect_faces(gray_img: np.ndarray) -> list:
         )
         if len(faces) > 0:
             return list(faces)
+
+    # 2. Try profile face cascade (for turned / angled poses)
+    if profile_cascade is not None and not profile_cascade.empty():
+        for img_to_check, is_flipped in [(enhanced, False), (cv2.flip(enhanced, 1), True)]:
+            p_faces = profile_cascade.detectMultiScale(
+                img_to_check,
+                scaleFactor=1.1,
+                minNeighbors=3,
+                minSize=(40, 40),
+            )
+            if len(p_faces) > 0:
+                results = []
+                w_img = gray_img.shape[1]
+                for (px, py, pw, ph) in p_faces:
+                    if is_flipped:
+                        px = w_img - (px + pw)
+                    results.append((px, py, pw, ph))
+                return results
 
     return []
 
@@ -278,14 +300,19 @@ def detect_and_embed(img_bytes: bytes, require_single_face: bool = False) -> np.
     # ── 2. OpenCV face detection + HOG+LBP embedding ─────────────────────────
     all_faces = detect_faces(gray)
 
-    # ── C1: No fallback — if no face found, return None ──────────────────────
+    # ── C1: Face crop selection with pose fallback ────────────────────────────
     if len(all_faces) == 0:
-        print("[INFO] No face detected — returning None (no fallback)")
-        return None
+        if require_single_face:
+            # Fallback for angled pose frames verified by frontend landmarks
+            h_img, w_img = gray.shape[:2]
+            all_faces = [(int(w_img * 0.2), int(h_img * 0.15), int(w_img * 0.6), int(h_img * 0.7))]
+            print("[INFO] No Haar face box — using centered pose crop fallback")
+        else:
+            print("[INFO] No face detected — returning None")
+            return None
 
     # ── H1: Quality gates (enrollment mode) ──────────────────────────────────
     if require_single_face:
-        # Reject multi-face frames
         if len(all_faces) > 1:
             print(f"[WARNING] Enrollment rejected: {len(all_faces)} faces detected (expected exactly 1)")
             return None
@@ -294,11 +321,11 @@ def detect_and_embed(img_bytes: bytes, require_single_face: bool = False) -> np.
         x, y, w, h = face_box
         frame_width = gray.shape[1]
 
-        # Minimum face size gate: reject if face < 12% of frame width
+        # Minimum face size gate: reject if face < 10% of frame width
         face_ratio = w / frame_width
-        if face_ratio < 0.12:
+        if face_ratio < 0.10:
             print(f"[WARNING] Enrollment rejected: face too small "
-                  f"({w}px = {face_ratio:.1%} of frame width, need ≥12%)")
+                  f"({w}px = {face_ratio:.1%} of frame width, need ≥10%)")
             return None
 
         # Blur gate: Laplacian variance on face crop
@@ -308,9 +335,9 @@ def detect_and_embed(img_bytes: bytes, require_single_face: bool = False) -> np.
         ]
         if face_crop_for_blur.size > 0:
             blur_score = cv2.Laplacian(face_crop_for_blur, cv2.CV_64F).var()
-            if blur_score < 35:
+            if blur_score < 15:
                 print(f"[WARNING] Enrollment rejected: face too blurry "
-                      f"(Laplacian variance={blur_score:.1f}, need ≥35)")
+                      f"(Laplacian variance={blur_score:.1f}, need ≥15)")
                 return None
             print(f"[INFO] Blur check passed (Laplacian variance={blur_score:.1f})")
     else:

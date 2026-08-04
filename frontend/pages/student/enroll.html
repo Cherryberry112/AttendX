@@ -132,35 +132,35 @@ const STEPS = [
     title:"Look Straight",
     desc: "Face the camera directly. Keep your head level and centered in the oval.",
     icon: "user",
-    yawMin:-14, yawMax:14, pitchMin:-16, pitchMax:16,
-    guide: null,
+    yawMin:-15, yawMax:15, pitchMin:-15, pitchMax:15,
+    guide: "Look straight at camera",
   },
   {
     title:"Turn Left",
-    desc: "Slowly turn your head to YOUR LEFT. Your right cheek should face the camera.",
+    desc: "Slowly turn your head to YOUR LEFT.",
     icon: "arrow-left",
-    yawMin:18, yawMax:60, pitchMin:-22, pitchMax:22,
+    yawMin:12, yawMax:65, pitchMin:-25, pitchMax:25,
     guide: "← Turn left",
   },
   {
     title:"Turn Right",
-    desc: "Now turn your head to YOUR RIGHT. Your left cheek should face the camera.",
+    desc: "Now turn your head to YOUR RIGHT.",
     icon: "arrow-right",
-    yawMin:-60, yawMax:-18, pitchMin:-22, pitchMax:22,
+    yawMin:-65, yawMax:-12, pitchMin:-25, pitchMax:25,
     guide: "Turn right →",
   },
   {
     title:"Look Up",
-    desc: "Tilt your chin slightly upward. Keep eyes open.",
+    desc: "Tilt your chin slightly upward.",
     icon: "arrow-up",
-    yawMin:-18, yawMax:18, pitchMin:14, pitchMax:55,
+    yawMin:-22, yawMax:22, pitchMin:10, pitchMax:60,
     guide: "↑ Look up",
   },
   {
     title:"Look Down",
     desc: "Tilt your chin slightly downward.",
     icon: "arrow-up-down",
-    yawMin:-18, yawMax:18, pitchMin:-55, pitchMax:-14,
+    yawMin:-22, yawMax:22, pitchMin:-60, pitchMax:-10,
     guide: "↓ Look down",
   },
 ];
@@ -170,7 +170,7 @@ const MODEL_URLS = [
   "https://justadudewhohacks.github.io/face-api.js/models",
   "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights"
 ];
-const HOLD_FRAMES = 15;   // consecutive good frames before capture (~1s at 15fps)
+const HOLD_FRAMES = 6;    // fast capture when pose is held (~0.35s)
 const LOOP_MS     = 66;   // ~15fps
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -280,12 +280,23 @@ function poseOk(pose) {
 
 function poseHint(pose) {
   const s = STEPS[currentStep];
-  const tips = [];
-  if (pose.yaw < s.yawMin)        tips.push("Turn more left ←");
-  else if (pose.yaw > s.yawMax)   tips.push("Turn more right →");
-  if (pose.pitch < s.pitchMin)     tips.push("Tilt chin down ↓");
-  else if (pose.pitch > s.pitchMax)tips.push("Tilt chin up ↑");
-  return tips.join(" · ") || STEPS[currentStep].guide || STEPS[currentStep].desc;
+
+  if (s.title === "Turn Left") {
+    if (pose.yaw < s.yawMin) return "Turn your head to YOUR LEFT ←";
+  } else if (s.title === "Turn Right") {
+    if (pose.yaw > s.yawMax) return "Turn your head to YOUR RIGHT →";
+  } else if (s.title === "Look Up") {
+    if (pose.pitch < s.pitchMin) return "Tilt your chin UP ↑";
+  } else if (s.title === "Look Down") {
+    if (pose.pitch > s.pitchMax) return "Tilt your chin DOWN ↓";
+  } else if (s.title === "Look Straight") {
+    if (pose.yaw < s.yawMin) return "Turn a bit right →";
+    if (pose.yaw > s.yawMax) return "Turn a bit left ←";
+    if (pose.pitch < s.pitchMin) return "Tilt a bit up ↑";
+    if (pose.pitch > s.pitchMax) return "Tilt a bit down ↓";
+  }
+
+  return s.guide || s.desc;
 }
 
 // ── Detection loop ────────────────────────────────────────────────────────────
