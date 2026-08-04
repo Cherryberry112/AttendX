@@ -165,7 +165,11 @@ const STEPS = [
   },
 ];
 
-const MODEL_URL   = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights";
+const MODEL_URLS = [
+  "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights",
+  "https://justadudewhohacks.github.io/face-api.js/models",
+  "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights"
+];
 const HOLD_FRAMES = 15;   // consecutive good frames before capture (~1s at 15fps)
 const LOOP_MS     = 66;   // ~15fps
 
@@ -460,23 +464,34 @@ async function startEnrollment() {
   }
 }
 
-// ── Load face-api.js models ───────────────────────────────────────────────────
+// ── Load face-api.js models with CDN fallback ───────────────────────────────
 async function initModels() {
   const bar  = document.getElementById("loaderBar");
   const note = document.getElementById("loaderNote");
 
-  try {
-    note.textContent = "Loading TinyFaceDetector…";
-    bar.style.width  = "20%";
-    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+  let loaded = false;
+  for (const url of MODEL_URLS) {
+    try {
+      note.textContent = "Loading TinyFaceDetector…";
+      bar.style.width  = "30%";
+      await faceapi.nets.tinyFaceDetector.loadFromUri(url);
 
-    note.textContent = "Loading landmark model…";
-    bar.style.width  = "70%";
-    await faceapi.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
+      note.textContent = "Loading landmark model…";
+      bar.style.width  = "75%";
+      await faceapi.nets.faceLandmark68TinyNet.loadFromUri(url);
 
-    bar.style.width  = "100%";
-    await sleep(250);
+      bar.style.width  = "100%";
+      await sleep(200);
 
+      loaded = true;
+      console.log("[face-api] Models loaded successfully from:", url);
+      break;
+    } catch (e) {
+      console.warn(`[face-api] Model load failed from ${url}, trying fallback CDN...`, e);
+    }
+  }
+
+  if (loaded) {
     modelReady = true;
     document.getElementById("mpLoader").style.display = "none";
     document.getElementById("stepTitle").textContent  = "Ready to Start";
@@ -484,13 +499,12 @@ async function initModels() {
       "Click Start Enrollment. The camera will guide you through 5 poses and capture automatically when each pose is held steady.";
     document.getElementById("startEnrollBtn").classList.remove("hidden");
     if (window.lucide) lucide.createIcons();
-
-  } catch (err) {
-    console.error("[face-api] model load failed:", err);
+  } else {
+    console.error("[face-api] All model CDNs failed to load");
     document.getElementById("mpLoader").innerHTML = `
       <span style="color:#ff6b6b;text-align:center;padding:1.5rem;line-height:1.6;">
         ⚠️ Failed to load face detection.<br>
-        <small>Check your internet connection and reload the page.</small>
+        <small>Please reload the page or check your connection.</small>
       </span>`;
   }
 }
