@@ -8,8 +8,7 @@ Built with a high-performance **Python/Flask** backend, a sleek **Vanilla CSS/JS
 🌐 **Live Frontend (Vercel):** [https://attendx-virid-mu.vercel.app/](https://attendx-virid-mu.vercel.app/)  
 ☁️ **Live Backend (Render):** [https://attendx.onrender.com](https://attendx.onrender.com)  
 📸 **Website Gallery:** [View Screenshots Folder](https://github.com/Cherryberry112/AttendX/tree/main/Gallery)  
-🎥 **Live Demonstration Video:** [Watch on Google Drive](https://drive.google.com/file/d/YOUR_VIDEO_ID_HERE/view)
-🎥 **Live Demonstration Video:** [Watch on Google Drive]([https://drive.google.com/file/d/YOUR_VIDEO_ID_HERE/view](https://drive.google.com/file/d/1ei7zC5TdMYjlmav49poLLYKtYTQqJ06o/view?usp=sharing))
+🎥 **Live Demonstration Video:** [Watch on Google Drive](https://drive.google.com/file/d/1ei7zC5TdMYjlmav49poLLYKtYTQqJ06o/view?usp=sharing)
 
 ---
 
