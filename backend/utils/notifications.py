@@ -213,7 +213,7 @@ def send_registration_email(username: str, email: str, role: str):
 
     <!-- CTA Button -->
     <div style="text-align: center; margin: 32px 0 16px 0;">
-      <a href="https://cherryberry112.github.io/AttendX/" target="_blank" style="display: inline-block; background-color: {_BRAND_PURPLE}; background: linear-gradient(135deg, {_BRAND_PURPLE} 0%, {_BRAND_DARK} 100%); color: #ffffff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 14px rgba(108, 99, 255, 0.35);">
+      <a href="https://attendx-virid-mu.vercel.app/" target="_blank" style="display: inline-block; background-color: {_BRAND_PURPLE}; background: linear-gradient(135deg, {_BRAND_PURPLE} 0%, {_BRAND_DARK} 100%); color: #ffffff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 14px rgba(108, 99, 255, 0.35);">
         Go to Your Dashboard &rarr;
       </a>
     </div>
@@ -282,7 +282,7 @@ def _send_attendance_email(username: str, email: str, course_name: str, date_fmt
 
     <!-- CTA Button -->
     <div style="text-align: center; margin: 32px 0 16px 0;">
-      <a href="https://cherryberry112.github.io/AttendX/frontend/pages/student/dashboard.html" target="_blank" style="display: inline-block; background-color: {_BRAND_PURPLE}; background: linear-gradient(135deg, {_BRAND_PURPLE} 0%, {_BRAND_DARK} 100%); color: #ffffff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 14px rgba(108, 99, 255, 0.35);">
+      <a href="https://attendx-virid-mu.vercel.app/pages/student/dashboard.html" target="_blank" style="display: inline-block; background-color: {_BRAND_PURPLE}; background: linear-gradient(135deg, {_BRAND_PURPLE} 0%, {_BRAND_DARK} 100%); color: #ffffff; font-weight: 700; font-size: 15px; text-decoration: none; padding: 14px 32px; border-radius: 8px; box-shadow: 0 4px 14px rgba(108, 99, 255, 0.35);">
         View Attendance History &rarr;
       </a>
     </div>
@@ -320,7 +320,7 @@ def send_course_request_email(admin_email: str, requester_name: str, requester_r
     <p>Please log in to the AttendX Admin Dashboard to approve or deny this request.</p>
     
     <div style="text-align: center; margin-top: 28px;">
-      <a href="https://cherryberry112.github.io/AttendX/" 
+      <a href="https://attendx-virid-mu.vercel.app/" 
          style="display: inline-block; background-color: {_BRAND_PURPLE}; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 6px; font-size: 14px;">
         Go to Admin Dashboard &rarr;
       </a>
