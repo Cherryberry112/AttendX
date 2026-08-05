@@ -476,10 +476,15 @@ async function runCountdown(video) {
 //   ✓ face-api.js pose validation: yaw/pitch within step bounds
 // No server round-trip needed here — /enroll validates all 3 frames at the end.
 async function captureAndVerify(video) {
-  // Capture unmirrored frame (CSS mirror does not affect canvas draw)
+  // Capture unmirrored frame and downscale to 320px width (speeds up dlib 4x)
+  const TARGET_WIDTH = 320;
+  const aspect = video.videoHeight / video.videoWidth;
+  const TARGET_HEIGHT = Math.round(TARGET_WIDTH * aspect);
+  
   const c = document.createElement("canvas");
-  c.width = video.videoWidth; c.height = video.videoHeight;
-  c.getContext("2d").drawImage(video, 0, 0);
+  c.width = TARGET_WIDTH; 
+  c.height = TARGET_HEIGHT;
+  c.getContext("2d").drawImage(video, 0, 0, TARGET_WIDTH, TARGET_HEIGHT);
   const frame = c.toDataURL("image/jpeg", 0.92);
 
   // Accept immediately — all quality gates passed on the client
@@ -523,8 +528,8 @@ async function submitEnrollment() {
   }
   updateStepUI(STEPS.length);
   document.getElementById("stepTitle").textContent = "⏳ Processing…";
-  document.getElementById("stepDesc").textContent  = "Saving your face profile…";
-  setMsg("⏳ Saving…", "p");
+  document.getElementById("stepDesc").textContent  = "Saving your face profile... This may take 30-90 seconds on free tier.";
+  setMsg("⏳ Saving (may take 1 min)…", "p");
 
   try {
     await api.post("/face/enroll", { frames: captures });
