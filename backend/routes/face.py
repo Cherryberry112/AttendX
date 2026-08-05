@@ -31,12 +31,18 @@ def _decode_b64_frame(frame_b64: str):
 @jwt_required()
 def validate_frame():
     """
-    Validate a single frame for face enrollment quality using the full
-    DNN + dlib pipeline quality gates (brightness, blur, face size, dlib encoding).
+    Fast quality check for a single enrollment frame.
+    Does NOT run dlib inference here — that's too slow on free-tier CPU (5-20s).
+    Dlib 128-dim extraction happens ONLY at /enroll (3 frames, called once).
+
+    Checks (all complete in <200ms on Render free tier):
+      1. Brightness  — mean(gray) >= 40
+      2. Blur        — Laplacian variance >= 100
+      3. DNN detect  — ResNet-10 SSD face presence
+      4. Face size   — bounding box >= 100x100 px
 
     Body:   { "frame": "data:image/jpeg;base64,..." }
-    Returns: { "valid": true }
-          or { "valid": false, "reason": "..." }
+    Returns: { "valid": true } or { "valid": false, "reason": "..." }
     """
     data = request.get_json(silent=True)
     if not data:
@@ -52,58 +58,44 @@ def validate_frame():
         return jsonify({"valid": False, "reason": "Invalid image data"}), 400
 
     try:
-        import cv2, numpy as np_
-        from ml.face_detector import detect_faces_dnn, _check_brightness, _check_blur, extract_embedding
+        import cv2
+        import numpy as np_
+        from ml.face_detector import detect_faces_dnn, _check_brightness, _check_blur
 
-        nparr = np.frombuffer(img_bytes, np_.uint8)
+        nparr = np_.frombuffer(img_bytes, np_.uint8)
         img   = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img is None:
             return jsonify({"valid": False, "reason": "Could not decode image"}), 400
 
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-        # ── Brightness ────────────────────────────────────────────────────────
+        # ── 1. Brightness check (~instant) ────────────────────────────────────
         brightness_err = _check_brightness(gray)
         if brightness_err:
             return jsonify({"valid": False, "reason": brightness_err}), 200
 
-        # ── Blur ──────────────────────────────────────────────────────────────
+        # ── 2. Blur check (~5ms) ──────────────────────────────────────────────
         blur_err = _check_blur(gray)
         if blur_err:
             return jsonify({"valid": False, "reason": blur_err}), 200
 
-        # ── DNN Face Detection ────────────────────────────────────────────────
+        # ── 3. DNN face detection (~50-100ms) ─────────────────────────────────
         boxes = detect_faces_dnn(img)
-
         if not boxes:
             return jsonify({
                 "valid": False,
                 "reason": "No face detected. Center your face, ensure good lighting, and fill the guide oval."
             }), 200
 
-        # detect_faces_dnn already returns only the largest face — if multiple
-        # were found before filtering, the user sees only 1 but we can note it.
-        # For enrollment, require exactly 1 clear face in the shot.
+        # ── 4. Face size check ────────────────────────────────────────────────
         x, y, bw, bh = boxes[0]
-
         if bw < 100 or bh < 100:
             return jsonify({
                 "valid": False,
                 "reason": f"Face too small ({bw}x{bh}px). Move closer and fill the oval."
             }), 200
 
-        # ── Crop and attempt dlib embedding ──────────────────────────────────
-        face_crop = img[max(0, y):min(img.shape[0], y + bh),
-                        max(0, x):min(img.shape[1], x + bw)]
-
-        emb = extract_embedding(face_crop)
-        if emb is None:
-            return jsonify({
-                "valid": False,
-                "reason": "Face detected but could not extract features. Ensure good lighting and face is unobstructed."
-            }), 200
-
-        print(f"[INFO] validate-frame: OK — face {bw}x{bh}, emb dim={len(emb)}")
+        print(f"[INFO] validate-frame: OK — face {bw}x{bh}px, quality checks passed")
         return jsonify({"valid": True}), 200
 
     except Exception as e:
