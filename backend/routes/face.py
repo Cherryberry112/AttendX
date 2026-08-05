@@ -1,12 +1,16 @@
 import base64
 import json
 import numpy as np
-from flask import Blueprint, request, jsonify
+from datetime import datetime
+import threading
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from __init__ import db
 from models import User, Course
 
 face_bp = Blueprint("face", __name__)
+
+_enrollment_jobs = {}   # job_id -> {status, poses_stored, error, student_id}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -107,15 +111,51 @@ def validate_frame():
 # Enrollment — receive 3 pose frames and store 128-dim embeddings
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _process_enrollment_async(app, job_id, student_id, frames_b64_list):
+    with app.app_context():
+        try:
+            from ml.face_detector import detect_and_embed
+            pose_embeddings = []
+            for idx, frame_b64 in enumerate(frames_b64_list):
+                img_bytes = _decode_b64_frame(frame_b64)
+                emb = detect_and_embed(img_bytes, require_single_face=True)
+                if emb is not None:
+                    pose_embeddings.append(emb.tolist())
+                else:
+                    raise ValueError(f"Step {idx+1} failed face extraction")
+            
+            student = User.query.get(student_id)
+            if not student:
+                raise ValueError("Student not found")
+            
+            student.face_embedding = json.dumps(pose_embeddings)
+            db.session.commit()
+            
+            _enrollment_jobs[job_id] = {
+                "status": "completed",
+                "poses_stored": len(pose_embeddings),
+                "student_id": student_id,
+            }
+            print(f"[SUCCESS] Async enrollment done: {job_id}")
+        except Exception as e:
+            db.session.rollback()
+            print(f"[ERROR] Async enrollment failed: {e}")
+            _enrollment_jobs[job_id] = {
+                "status": "failed",
+                "error": str(e),
+                "student_id": student_id,
+            }
+
+
 @face_bp.post("/enroll")
 @jwt_required()
 def enroll():
     """
-    Receive exactly 3 server-validated pose frames, extract 128-dim dlib
-    embeddings, and store them as a JSON array-of-arrays in the database.
+    Receive exactly 3 server-validated pose frames, process 128-dim dlib
+    embeddings asynchronously, and store them as a JSON array-of-arrays in the DB.
 
     Body:   { "frames": ["data:image/jpeg;base64,...", ...] }  (exactly 3)
-    Returns: { "message": "...", "poses_stored": 3 }
+    Returns: 202 Accepted with job_id for polling.
     """
     identity = get_jwt_identity()
     student  = User.query.filter_by(id=identity["id"], type="student").first()
@@ -132,56 +172,35 @@ def enroll():
             "error": f"Exactly 3 frames required for enrollment (received {len(frames)})"
         }), 400
 
-    try:
-        from ml.face_detector import detect_and_embed
-    except ImportError as e:
-        return jsonify({"error": f"ML module unavailable: {e}"}), 500
+    job_id = f"enroll_{student.id}_{int(datetime.now().timestamp())}"
+    _enrollment_jobs[job_id] = {"status": "processing", "student_id": student.id}
 
-    # ── Extract one 128-dim embedding per pose frame ───────────────────────
-    pose_embeddings = []
-
-    for idx, frame_b64 in enumerate(frames):
-        step = idx + 1
-        try:
-            img_bytes = _decode_b64_frame(frame_b64)
-            embedding = detect_and_embed(img_bytes, require_single_face=True)
-
-            if embedding is not None:
-                pose_embeddings.append(embedding.tolist())
-                print(f"[INFO] Enroll step {step}: 128-dim embedding OK")
-            else:
-                # Hard reject — do not skip any pose step
-                print(f"[ERROR] Enroll step {step}: embedding failed")
-                return jsonify({
-                    "error": (
-                        f"Step {step} failed quality check. "
-                        "Ensure good lighting, only your face in frame, and hold steady. "
-                        "Please re-enroll from the beginning."
-                    )
-                }), 422
-
-        except Exception as e:
-            print(f"[ERROR] Enroll step {step} exception: {e}")
-            return jsonify({
-                "error": f"Step {step} processing error — please re-enroll. ({e})"
-            }), 500
-
-    # ── All 3 embeddings extracted — save to DB ────────────────────────────
-    student.face_embedding = json.dumps(pose_embeddings)
-    try:
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        print(f"[ERROR] Database commit failed: {e}")
-        return jsonify({"error": "Database error — could not save face embedding. Please try again."}), 500
-
-    print(f"[SUCCESS] Enrolled 3 pose embeddings (128-dim dlib) for "
-          f"{student.username} (id={student.id})")
+    thread = threading.Thread(
+        target=_process_enrollment_async,
+        args=(current_app._get_current_object(), job_id, student.id, frames),
+        daemon=True
+    )
+    thread.start()
 
     return jsonify({
-        "message": "Face enrolled across 3 angles",
-        "poses_stored": len(pose_embeddings),
-    }), 200
+        "status": "processing",
+        "job_id": job_id,
+        "message": "Enrollment is processing in the background. Poll /face/enroll-status for updates."
+    }), 202
+
+
+@face_bp.get("/enroll-status/<job_id>")
+@jwt_required()
+def enroll_status(job_id):
+    job = _enrollment_jobs.get(job_id)
+    if not job:
+        return jsonify({"error": "Enrollment job not found"}), 404
+    
+    identity = get_jwt_identity()
+    if job.get("student_id") != identity["id"]:
+        return jsonify({"error": "Unauthorized"}), 403
+        
+    return jsonify(job), 200
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -151,7 +151,7 @@ def extract_embedding(face_crop: np.ndarray) -> Optional[np.ndarray]:
     known_locations = [(0, w, h, 0)]
 
     try:
-        encodings = face_recognition.face_encodings(rgb, known_face_locations=known_locations)
+        encodings = face_recognition.face_encodings(rgb, known_face_locations=known_locations, num_jitters=0)
     except Exception as e:
         print(f"[ERROR] face_recognition.face_encodings failed: {e}")
         return None
