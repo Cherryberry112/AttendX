@@ -106,7 +106,7 @@
       <div id="successState" class="hidden card text-center" style="padding:3rem;">
         <div style="font-size:4rem;margin-bottom:1rem"><i data-lucide="check-circle"></i></div>
         <h2>Face Enrolled Successfully!</h2>
-        <p class="mt-1">Your face is registered across 5 poses. You will be automatically detected in live attendance.</p>
+        <p class="mt-1">Your face is registered across 3 angles. You will be automatically detected in live attendance.</p>
         <div style="margin-top:2rem;display:flex;gap:1rem;justify-content:center;">
           <a href="dashboard.html" class="btn btn-primary btn-lg">Go to Dashboard <i data-lucide="arrow-right"></i></a>
         </div>
@@ -147,34 +147,17 @@ const STEPS = [
   },
   {
     title:"Turn Left",
-    desc: "Slowly turn your head to YOUR LEFT.",
+    desc: "Slowly turn your head to YOUR LEFT until it registers.",
     icon: "arrow-left",
     yawMin:12, yawMax:70, pitchMin:-30, pitchMax:30,
     guide: "← Turn left",
   },
   {
     title:"Turn Right",
-    desc: "Now turn your head to YOUR RIGHT.",
+    desc: "Now turn your head to YOUR RIGHT until it registers.",
     icon: "arrow-right",
     yawMin:-70, yawMax:-12, pitchMin:-30, pitchMax:30,
     guide: "Turn right →",
-  },
-  {
-    // No pitch gate — user just follows instruction to tilt chin down.
-    // 2D landmark pitch is too noisy; instruction guides pose, any face is accepted.
-    title:"Look Down",
-    desc: "Tilt your chin DOWN — look toward your chest and hold still.",
-    icon: "arrow-down",
-    yawMin:-35, yawMax:35, pitchMin:-90, pitchMax:90,
-    guide: "↓ Chin DOWN — look at your chest",
-  },
-  {
-    // No pitch gate — user just follows instruction to tilt chin up.
-    title:"Look Up",
-    desc: "Tilt your chin UP — look toward the ceiling and hold still.",
-    icon: "arrow-up",
-    yawMin:-35, yawMax:35, pitchMin:-90, pitchMax:90,
-    guide: "↑ Chin UP — look at the ceiling",
   },
 ];
 
@@ -183,17 +166,19 @@ const MODEL_URLS = [
   "https://justadudewhohacks.github.io/face-api.js/models",
   "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights"
 ];
-const HOLD_FRAMES = 8;    // ~0.5s at 15fps — steady but not frustrating
-const LOOP_MS     = 66;   // ~15fps
+const HOLD_FRAMES   = 30;   // ~2.0s at 15fps — patient enrollment
+const LOOP_MS       = 66;   // ~15fps
+const BLUR_THRESHOLD = 80;  // Laplacian variance minimum before hold starts
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let modelReady  = false;
-let videoStream = null;
-let currentStep = -1;
-let holdCount   = 0;
-let captures    = [];
-let loopTimer   = null;
-let busy        = false;   // prevents re-entrant captures
+let modelReady     = false;
+let videoStream    = null;
+let currentStep    = -1;
+let holdCount      = 0;
+let captures       = [];
+let loopTimer      = null;
+let busy           = false;   // prevents re-entrant captures
+let countingDown   = false;   // true while 3-2-1 countdown is active
 
 // ── Build step indicators ─────────────────────────────────────────────────────
 function buildStepIndicators() {
@@ -353,14 +338,23 @@ async function detectionTick() {
     return;
   }
 
-  // ── Face size check — must fill a reasonable portion of frame ─────────────
-  const box     = detections[0].detection.box;
-  const videoW  = video.videoWidth;
+  // ── Face size guard — must fill ≥25% of frame width ─────────────────────
+  const box       = detections[0].detection.box;
+  const videoW    = video.videoWidth;
   const faceRatio = box.width / videoW;
-  if (faceRatio < 0.12) {
+  if (faceRatio < 0.25) {
     holdCount = 0; drawArc(0);
     setOval("state-pose");
-    setMsg("📏 Move closer to the camera", "a");
+    setMsg("📏 Move closer — fill the oval", "a");
+    return;
+  }
+
+  // ── Client blur check (Laplacian variance on grayscale canvas crop) ───────
+  const blurScore = computeBlur(video, box);
+  if (blurScore < BLUR_THRESHOLD) {
+    holdCount = 0; drawArc(0);
+    setOval("state-pose");
+    setMsg("🌀 Image too blurry — hold still", "a");
     return;
   }
 
@@ -379,43 +373,160 @@ async function detectionTick() {
   setOval("state-hold");
 
   if (holdCount < HOLD_FRAMES) {
-    const rem = Math.ceil((HOLD_FRAMES - holdCount) / (1000 / LOOP_MS));
-    setMsg(`✓ Hold still… ${holdCount}/${HOLD_FRAMES}`, "g");
+    const secs = ((HOLD_FRAMES - holdCount) * LOOP_MS / 1000).toFixed(1);
+    setMsg(`✓ Hold still… ${secs}s`, "g");
     return;
   }
 
-  // ── HOLD COMPLETE — capture ───────────────────────────────────────────────
-  holdCount = 0; drawArc(0);
+  // ── HOLD COMPLETE — begin 3-2-1 countdown (abort if pose breaks) ─────────
+  holdCount = 0; drawArc(1);
+  countingDown = true;
+  stopLoop();  // pause detection tick during countdown
+
+  // Run countdown ticks; each tick re-checks pose — aborts if face lost
+  const aborted = await runCountdown(video);
+  countingDown = false;
+
+  if (aborted) {
+    // Pose broke during countdown — reset and resume detection
+    drawArc(0);
+    setOval("state-no-face");
+    setMsg("🔍 Pose lost — try again", "r");
+    await sleep(600);
+    busy = false;
+    startLoop();
+    return;
+  }
+
+  // ── COUNTDOWN DONE — capture ──────────────────────────────────────────────
   busy = true;
-  stopLoop();
   await captureAndVerify(video);
 }
 
-// ── Capture locally — no per-frame server round-trip ─────────────────────────
-// face-api.js already confirmed: 1 face, correct pose, held 6 steady frames.
-// The server embedding quality check happens once at /face/enroll submission.
-async function captureAndVerify(video) {
-  setOval("state-ok");
-  setMsg(`✅ Step ${currentStep+1}/${STEPS.length} captured!`, "g");
+// ── Laplacian variance blur estimate from a face crop ────────────────────────
+function computeBlur(video, box) {
+  try {
+    const c = document.createElement("canvas");
+    // Use a 64x64 sample from the face region for speed
+    c.width = 64; c.height = 64;
+    const ctx = c.getContext("2d");
+    const sx = Math.max(0, box.x);
+    const sy = Math.max(0, box.y);
+    ctx.drawImage(video, sx, sy, box.width, box.height, 0, 0, 64, 64);
+    const data = ctx.getImageData(0, 0, 64, 64).data;
 
-  // Capture unmirrored frame (CSS mirror doesn't affect canvas)
+    // Convert to grayscale array
+    const gray = [];
+    for (let i = 0; i < data.length; i += 4) {
+      gray.push(0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]);
+    }
+
+    // Approximate Laplacian: variance of [centre - mean(neighbours)]
+    let sum = 0, sum2 = 0, n = 0;
+    const W = 64;
+    for (let y = 1; y < 63; y++) {
+      for (let x = 1; x < 63; x++) {
+        const lap = 4*gray[y*W+x]
+          - gray[(y-1)*W+x] - gray[(y+1)*W+x]
+          - gray[y*W+(x-1)] - gray[y*W+(x+1)];
+        sum  += lap;
+        sum2 += lap * lap;
+        n++;
+      }
+    }
+    const mean = sum / n;
+    return (sum2 / n) - mean * mean;  // variance = E[X²] - E[X]²
+  } catch (_) {
+    return 999;  // if anything fails, skip the blur gate
+  }
+}
+
+// ── 3-2-1 countdown — returns true if aborted (pose broke) ───────────────────
+async function runCountdown(video) {
+  for (const n of ["3", "2", "1"]) {
+    setOval("state-verify");
+    setMsg(`📸 Get ready… ${n}`, "p");
+    drawArc(1);
+
+    // Check pose twice during each 0.5s window
+    for (let t = 0; t < 2; t++) {
+      await sleep(250);
+      // Recheck face & pose — abort if lost
+      const dets = await faceapi
+        .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
+        .withFaceLandmarks(true);
+      if (!dets || dets.length !== 1) return true;   // face lost
+      const pose = computePose(dets[0].landmarks);
+      if (!poseOk(pose)) return true;                // pose broke
+    }
+  }
+
+  // Flash white overlay
+  setOval("state-ok");
+  setMsg("📸 Captured!", "g");
+  return false;  // countdown completed normally
+}
+
+// ── Capture + server-side validation per frame ───────────────────────────────
+async function captureAndVerify(video) {
+  // Capture unmirrored frame (CSS mirror does not affect canvas draw)
   const c = document.createElement("canvas");
   c.width = video.videoWidth; c.height = video.videoHeight;
   c.getContext("2d").drawImage(video, 0, 0);
-  captures.push(c.toDataURL("image/jpeg", 0.92));
+  const frame = c.toDataURL("image/jpeg", 0.92);
 
-  showToast(`Pose ${currentStep+1}/${STEPS.length} done ✓`, "success", 1000);
-  await sleep(800);
+  // Server-side validation
+  setOval("state-verify");
+  setMsg("🔄 Verifying on server…", "p");
 
-  currentStep++;
-  if (currentStep < STEPS.length) {
-    updateStepUI(currentStep);
+  try {
+    const res = await api.post("/face/validate-frame", { frame });
+
+    if (res.valid) {
+      // ── SERVER ACCEPTED ───────────────────────────────────────────────────
+      captures.push(frame);
+      setOval("state-ok");
+      setMsg(`✅ Step ${currentStep+1}/${STEPS.length} verified!`, "g");
+      showToast(`Angle ${currentStep+1}/${STEPS.length} saved ✓`, "success", 1200);
+      await sleep(900);
+
+      currentStep++;
+      if (currentStep < STEPS.length) {
+        updateStepUI(currentStep);
+        setOval("state-no-face");
+        setMsg("🔍 Detecting face…", "");
+        busy = false;
+        startLoop();
+      } else {
+        await submitEnrollment();
+      }
+
+    } else {
+      // ── SERVER REJECTED — show reason, reset hold, retry same step ───────
+      const reason = res.reason || "Face not clear enough — try again";
+      setOval("state-bad");
+      setMsg(`❌ ${reason}`, "r");
+      showToast("Retry: " + reason, "error", 3000);
+      await sleep(2500);
+      holdCount = 0;
+      drawArc(0);
+      setOval("state-no-face");
+      setMsg("🔍 Detecting face…", "");
+      busy = false;
+      startLoop();
+    }
+
+  } catch (err) {
+    // Network error — fail gracefully and retry
+    setOval("state-bad");
+    setMsg("⚠️ Server unreachable — retrying step…", "r");
+    await sleep(2000);
+    holdCount = 0;
+    drawArc(0);
     setOval("state-no-face");
     setMsg("🔍 Detecting face…", "");
     busy = false;
     startLoop();
-  } else {
-    await submitEnrollment();
   }
 }
 
@@ -430,6 +541,15 @@ function stopLoop() {
 
 // ── Submit enrollment ─────────────────────────────────────────────────────────
 async function submitEnrollment() {
+  if (captures.length < 3) {
+    showToast("Not enough verified frames — please redo enrollment.", "error", 4000);
+    captures = []; currentStep = 0; busy = false;
+    updateStepUI(0);
+    setOval("state-no-face");
+    setMsg("🔍 Detecting face…", "");
+    startLoop();
+    return;
+  }
   updateStepUI(STEPS.length);
   document.getElementById("stepTitle").textContent = "⏳ Processing…";
   document.getElementById("stepDesc").textContent  = "Saving your face profile…";
@@ -508,7 +628,7 @@ async function initModels() {
     document.getElementById("mpLoader").style.display = "none";
     document.getElementById("stepTitle").textContent  = "Ready to Start";
     document.getElementById("stepDesc").textContent   =
-      "Click Start Enrollment. The camera will guide you through 5 poses and capture automatically when each pose is held steady.";
+      "Click Start Enrollment. Hold each of the 3 angle poses steady for ~2 seconds — a countdown will appear before each capture.";
     document.getElementById("startEnrollBtn").classList.remove("hidden");
     if (window.lucide) lucide.createIcons();
   } else {
