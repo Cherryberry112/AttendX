@@ -191,10 +191,7 @@
     document.getElementById("eCName").value = c.name;
     document.getElementById("eCSection").value = c.section || "";
     populateTeacherSelect("eCTeacher", c.teacher_id);
-    // Get enrolled student IDs from mock
-    const mockCourses = JSON.parse(localStorage.getItem("ax_mock_courses") || "[]");
-    const mc = mockCourses.find(x => x.id === id);
-    const enrolledIds = mc ? (mc.student_ids || []) : [];
+    const enrolledIds = c.student_ids || [];
     populateStudentCheckboxes("eCStudentList", enrolledIds);
     openModal("editCourseModal");
   }

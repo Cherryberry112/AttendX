@@ -105,6 +105,7 @@ def list_courses():
             "teacher": teacher_name,
             "teacher_id": c.teacher_id,
             "enrolled": enrolled_count,
+            "student_ids": [s.id for s in c.students]
         })
     return jsonify(result), 200
 
@@ -148,11 +149,14 @@ def approve_request(req_id):
     course = Course.query.get(req.course_id)
     
     if user.type == "student":
-        course.students.append(user)
-        msg = f"Your request to enroll in {course.name} was approved."
+        if user not in course.students.all():
+            course.students.append(user)
+        section_str = f" ({course.section})" if course.section else ""
+        msg = f"Your request to enroll in {course.name}{section_str} was approved."
     elif user.type == "teacher":
         course.teacher_id = user.id
-        msg = f"Your request to teach {course.name} was approved."
+        section_str = f" ({course.section})" if course.section else ""
+        msg = f"Your request to teach {course.name}{section_str} was approved."
     else:
         return jsonify({"error": "Invalid user role"}), 400
         
@@ -176,7 +180,8 @@ def deny_request(req_id):
     course = Course.query.get(req.course_id)
     
     req.status = "denied"
-    msg = f"Your request for {course.name} was denied."
+    section_str = f" ({course.section})" if course.section else ""
+    msg = f"Your request for {course.name}{section_str} was denied."
     notif = Notification(user_id=user.id, message=msg)
     db.session.add(notif)
     db.session.commit()
@@ -228,8 +233,9 @@ def update_course(course_id):
     if "teacher_id" in data:
         course.teacher_id = data["teacher_id"]
     if "student_ids" in data:
-        # Replace enrolled students
-        course.students = []
+        # Replace enrolled students safely for dynamic relationship
+        for s in course.students.all():
+            course.students.remove(s)
         for sid in data["student_ids"]:
             student = User.query.filter_by(id=sid, type="student").first()
             if student:
