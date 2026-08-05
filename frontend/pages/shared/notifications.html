@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Notifications — AttendX</title>
+  <link rel="stylesheet" href="../../css/global.css"/>
+  <link rel="stylesheet" href="../../css/dashboard.css"/>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    .notification-item {
+      padding: 1.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      background: transparent;
+      transition: none; /* static look as requested */
+    }
+    .notification-item.unread {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .notification-item:last-child {
+      border-bottom: none;
+    }
+    .notif-icon {
+      color: #00F0FF;
+      flex-shrink: 0;
+      margin-top: 0.25rem;
+    }
+    .notif-content {
+      flex: 1;
+    }
+    .notif-message {
+      font-size: 1rem;
+      color: #fff;
+      margin-bottom: 0.5rem;
+      line-height: 1.5;
+    }
+    .notif-time {
+      font-size: 0.85rem;
+      color: #aaa;
+    }
+    .empty-state {
+      padding: 3rem;
+      text-align: center;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+<div class="app-layout">
+  <div id="sidebar-placeholder"></div>
+
+  <main class="main-content">
+    <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h1><i data-lucide="bell"></i> Notifications</h1>
+        <p>Stay updated on your requests and course changes.</p>
+      </div>
+      <button class="btn btn-outline" onclick="markAllAsRead()" id="markReadBtn" style="display:none;">Mark All as Read</button>
+    </div>
+
+    <div class="card" style="padding: 0;">
+      <div id="notificationsList">
+        <div class="empty-state">Loading notifications...</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="../../js/utils.js"></script>
+<script src="notifications.js"></script>
+</body>
+</html>

@@ -8,6 +8,8 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- 2. DROP OLD/CONFLICTING TABLES & ENUMS (clean migration)
+DROP TABLE IF EXISTS notifications CASCADE;
+DROP TABLE IF EXISTS course_requests CASCADE;
 DROP TABLE IF EXISTS attendance_records CASCADE;
 DROP TABLE IF EXISTS attendance_sessions CASCADE;
 DROP TABLE IF EXISTS enrollments CASCADE;
@@ -47,6 +49,7 @@ CREATE TABLE users (
 CREATE TABLE courses (
     id               SERIAL PRIMARY KEY,
     name             TEXT NOT NULL,
+    section          TEXT,
     teacher_id       INT REFERENCES users(id) ON DELETE SET NULL,
     created_at       TIMESTAMPTZ DEFAULT NOW()
 );
@@ -71,6 +74,28 @@ CREATE TABLE attendance (
     course_id    INT REFERENCES courses(id) ON DELETE CASCADE,
     created_at   TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(date, student_id, course_id)
+);
+
+-- ============================================================
+-- Table 4: Course Requests (Student enrollment / Teacher assignment)
+-- ============================================================
+CREATE TABLE course_requests (
+    id           SERIAL PRIMARY KEY,
+    user_id      INT REFERENCES users(id) ON DELETE CASCADE,
+    course_id    INT REFERENCES courses(id) ON DELETE CASCADE,
+    status       TEXT DEFAULT 'pending', -- 'pending', 'approved', 'denied'
+    created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ============================================================
+-- Table 5: Notifications
+-- ============================================================
+CREATE TABLE notifications (
+    id           SERIAL PRIMARY KEY,
+    user_id      INT REFERENCES users(id) ON DELETE CASCADE,
+    message      TEXT NOT NULL,
+    is_read      BOOLEAN DEFAULT FALSE,
+    created_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================================
@@ -113,17 +138,17 @@ INSERT INTO users (
 (16, 'student', '2022-3-60-119', 'nabil@example.com', '+8801811111110', 'nabil', '$2b$12$.l7MezcghInCuxrhyd3r5uj5Hrt.fL4ZSq/fVqwzI6jLx19rj/l2K', NULL, '+8801911111110');
 
 -- Courses (IDs 101 - 110)
-INSERT INTO courses (id, name, teacher_id) VALUES
-(101, 'Web Development Fundamentals', 2),
-(102, 'Data Science for Beginners', 3),
-(103, 'Digital Marketing Mastery', 4),
-(104, 'Python for Everybody', 2),
-(105, 'Graphic Design Essentials', 6),
-(106, 'Mobile App Development', 2),
-(107, 'AI and Machine Learning', 3),
-(108, 'Cybersecurity Fundamentals', 5),
-(109, 'UX/UI Design Principles', 6),
-(110, 'Blockchain Essentials', 5);
+INSERT INTO courses (id, name, section, teacher_id) VALUES
+(101, 'Web Development Fundamentals', 'A', 2),
+(102, 'Data Science for Beginners', 'B', 3),
+(103, 'Digital Marketing Mastery', 'A', 4),
+(104, 'Python for Everybody', 'C', 2),
+(105, 'Graphic Design Essentials', 'A', 6),
+(106, 'Mobile App Development', 'B', 2),
+(107, 'AI and Machine Learning', 'A', 3),
+(108, 'Cybersecurity Fundamentals', 'A', 5),
+(109, 'UX/UI Design Principles', 'B', 6),
+(110, 'Blockchain Essentials', 'C', 5);
 
 -- Course ↔ Student Enrollments (course_students junction table)
 INSERT INTO course_students (course_id, student_id) VALUES
@@ -170,3 +195,5 @@ INSERT INTO attendance (id, date, student_id, course_id) VALUES
 SELECT setval('users_id_seq', (SELECT MAX(id) FROM users), true);
 SELECT setval('courses_id_seq', (SELECT MAX(id) FROM courses), true);
 SELECT setval('attendance_id_seq', (SELECT MAX(id) FROM attendance), true);
+SELECT setval('course_requests_id_seq', (SELECT COALESCE(MAX(id), 1) FROM course_requests), true);
+SELECT setval('notifications_id_seq', (SELECT COALESCE(MAX(id), 1) FROM notifications), true);

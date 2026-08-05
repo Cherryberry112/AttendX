@@ -45,11 +45,13 @@ const Auth = {
 /* ── Mock Database Setup ────────────────────────────────────── */
 if (USE_MOCK) {
   const initDb = () => {
-    if (localStorage.getItem("ax_mock_version") !== "v3_user_data") {
+    if (localStorage.getItem("ax_mock_version") !== "v4_course_requests") {
       localStorage.removeItem("ax_mock_users");
       localStorage.removeItem("ax_mock_courses");
       localStorage.removeItem("ax_mock_attendance");
-      localStorage.setItem("ax_mock_version", "v3_user_data");
+      localStorage.removeItem("ax_mock_requests");
+      localStorage.removeItem("ax_mock_notifications");
+      localStorage.setItem("ax_mock_version", "v4_course_requests");
     }
     if (!localStorage.getItem("ax_mock_users")) {
       const defaultUsers = [
@@ -74,16 +76,16 @@ if (USE_MOCK) {
     }
     if (!localStorage.getItem("ax_mock_courses")) {
       const defaultCourses = [
-        { id: 101, name: "Web Development Fundamentals", teacher_id: 2, student_ids: [7, 8, 9, 10, 11] },
-        { id: 102, name: "Data Science for Beginners", teacher_id: 3, student_ids: [7, 8, 12, 13] },
-        { id: 103, name: "Digital Marketing Mastery", teacher_id: 4, student_ids: [9, 10, 14, 15] },
-        { id: 104, name: "Python for Everybody", teacher_id: 2, student_ids: [7, 11, 12, 16] },
-        { id: 105, name: "Graphic Design Essentials", teacher_id: 6, student_ids: [8, 13, 14, 15] },
-        { id: 106, name: "Mobile App Development", teacher_id: 2, student_ids: [9, 10, 11, 16] },
-        { id: 107, name: "AI and Machine Learning", teacher_id: 3, student_ids: [7, 8, 12, 13] },
-        { id: 108, name: "Cybersecurity Fundamentals", teacher_id: 5, student_ids: [14, 15, 16] },
-        { id: 109, name: "UX/UI Design Principles", teacher_id: 6, student_ids: [9, 10, 13, 15] },
-        { id: 110, name: "Blockchain Essentials", teacher_id: 5, student_ids: [7, 11, 12, 16] },
+        { id: 101, name: "Web Development Fundamentals", section: "A", teacher_id: 2, student_ids: [7, 8, 9, 10, 11] },
+        { id: 102, name: "Data Science for Beginners", section: "B", teacher_id: 3, student_ids: [7, 8, 12, 13] },
+        { id: 103, name: "Digital Marketing Mastery", section: "A", teacher_id: 4, student_ids: [9, 10, 14, 15] },
+        { id: 104, name: "Python for Everybody", section: "C", teacher_id: 2, student_ids: [7, 11, 12, 16] },
+        { id: 105, name: "Graphic Design Essentials", section: "A", teacher_id: 6, student_ids: [8, 13, 14, 15] },
+        { id: 106, name: "Mobile App Development", section: "B", teacher_id: 2, student_ids: [9, 10, 11, 16] },
+        { id: 107, name: "AI and Machine Learning", section: "A", teacher_id: 3, student_ids: [7, 8, 12, 13] },
+        { id: 108, name: "Cybersecurity Fundamentals", section: "A", teacher_id: 5, student_ids: [14, 15, 16] },
+        { id: 109, name: "UX/UI Design Principles", section: "B", teacher_id: 6, student_ids: [9, 10, 13, 15] },
+        { id: 110, name: "Blockchain Essentials", section: "C", teacher_id: 5, student_ids: [7, 11, 12, 16] },
       ];
       localStorage.setItem("ax_mock_courses", JSON.stringify(defaultCourses));
     }
@@ -101,6 +103,12 @@ if (USE_MOCK) {
         { id: 10, date: "2026-07-22", student_id: 12, course_id: 107 },
       ];
       localStorage.setItem("ax_mock_attendance", JSON.stringify(defaultAttendance));
+    }
+    if (!localStorage.getItem("ax_mock_requests")) {
+      localStorage.setItem("ax_mock_requests", JSON.stringify([]));
+    }
+    if (!localStorage.getItem("ax_mock_notifications")) {
+      localStorage.setItem("ax_mock_notifications", JSON.stringify([]));
     }
   };
   initDb();
@@ -372,6 +380,97 @@ const handleMockRequest = async (method, path, body) => {
     });
   }
 
+  // ── Requests & Notifications ─────────────────────────────────
+  const requests = JSON.parse(localStorage.getItem("ax_mock_requests") || "[]");
+  const notifications = JSON.parse(localStorage.getItem("ax_mock_notifications") || "[]");
+
+  function sendNotif(userId, message) {
+    const notifId = notifications.length ? Math.max(...notifications.map(n => n.id)) + 1 : 1;
+    notifications.push({ id: notifId, user_id: userId, message, is_read: false, created_at: new Date().toISOString() });
+    setMockDb("ax_mock_notifications", notifications);
+  }
+
+  if (method === "GET" && path === "/notifications") {
+    return notifications.filter(n => n.user_id === currentUser.id).sort((a,b) => b.id - a.id);
+  }
+  if (method === "POST" && path === "/notifications/read_all") {
+    notifications.forEach(n => { if (n.user_id === currentUser.id) n.is_read = true; });
+    setMockDb("ax_mock_notifications", notifications);
+    return { message: "Read" };
+  }
+
+  // Admin Request Handlers
+  if (method === "GET" && path === "/admin/requests") {
+    return requests.filter(r => r.status === "pending").map(r => {
+      const u = users.find(x => x.id === r.user_id) || {};
+      const c = courses.find(x => x.id === r.course_id) || {};
+      return { id: r.id, user_id: r.user_id, user_name: u.username, user_role: u.type, course_id: r.course_id, course_name: c.name + " (" + (c.section||"N/A") + ")", status: r.status };
+    });
+  }
+  if (method === "POST" && path.match(/^\/admin\/requests\/\d+\/approve$/)) {
+    const reqId = parseInt(path.split("/")[3]);
+    const r = requests.find(x => x.id === reqId);
+    if (!r) throw new Error("Not found");
+    r.status = "approved";
+    setMockDb("ax_mock_requests", requests);
+    
+    const u = users.find(x => x.id === r.user_id);
+    const c = courses.find(x => x.id === r.course_id);
+    if (u && c) {
+      if (u.type === "student") {
+        if (!c.student_ids) c.student_ids = [];
+        if (!c.student_ids.includes(u.id)) c.student_ids.push(u.id);
+        sendNotif(u.id, `Your request to enroll in ${c.name} was approved.`);
+      } else if (u.type === "teacher") {
+        c.teacher_id = u.id;
+        sendNotif(u.id, `Your request to teach ${c.name} was approved.`);
+      }
+      setMockDb("ax_mock_courses", courses);
+    }
+    return { message: "Approved" };
+  }
+  if (method === "POST" && path.match(/^\/admin\/requests\/\d+\/deny$/)) {
+    const reqId = parseInt(path.split("/")[3]);
+    const r = requests.find(x => x.id === reqId);
+    if (!r) throw new Error("Not found");
+    r.status = "denied";
+    setMockDb("ax_mock_requests", requests);
+    const c = courses.find(x => x.id === r.course_id);
+    if (c) sendNotif(r.user_id, `Your request for ${c.name} was denied.`);
+    return { message: "Denied" };
+  }
+
+  // Student Available Courses & Request
+  if (method === "GET" && path === "/student/courses/available") {
+    const enrolledIds = courses.filter(c => (c.student_ids||[]).includes(currentUser.id)).map(c => c.id);
+    const pendingIds = requests.filter(r => r.user_id === currentUser.id && r.status === "pending").map(r => r.course_id);
+    const exclude = new Set([...enrolledIds, ...pendingIds]);
+    return courses.filter(c => !exclude.has(c.id)).map(c => {
+      const t = users.find(x => x.id === c.teacher_id);
+      return { id: c.id, name: c.name, section: c.section, teacher: t ? t.username : "Unassigned" };
+    });
+  }
+  if (method === "POST" && path === "/student/requests") {
+    const cid = body.course_id;
+    const reqId = requests.length ? Math.max(...requests.map(x => x.id)) + 1 : 1;
+    requests.push({ id: reqId, user_id: currentUser.id, course_id: cid, status: "pending", created_at: new Date().toISOString() });
+    setMockDb("ax_mock_requests", requests);
+    return { message: "Requested" };
+  }
+
+  // Teacher Available Courses & Request
+  if (method === "GET" && path === "/teacher/courses/available") {
+    const pendingIds = requests.filter(r => r.user_id === currentUser.id && r.status === "pending").map(r => r.course_id);
+    return courses.filter(c => !c.teacher_id && !pendingIds.includes(c.id)).map(c => ({ id: c.id, name: c.name, section: c.section }));
+  }
+  if (method === "POST" && path === "/teacher/requests") {
+    const cid = body.course_id;
+    const reqId = requests.length ? Math.max(...requests.map(x => x.id)) + 1 : 1;
+    requests.push({ id: reqId, user_id: currentUser.id, course_id: cid, status: "pending", created_at: new Date().toISOString() });
+    setMockDb("ax_mock_requests", requests);
+    return { message: "Requested" };
+  }
+
   throw new Error("API Route " + method + " " + path + " not found in mock db");
 };
 
@@ -518,19 +617,25 @@ function renderSidebar(role, activePage) {
   const navs = {
     teacher: [
       { icon: "layout-dashboard", label: "Dashboard",   href: "dashboard.html" },
+      { icon: "search",           label: "Browse Courses", href: "browse.html" },
       { icon: "users",            label: "My Students", href: "students.html" },
+      { icon: "bell",             label: "Notifications", href: "../shared/notifications.html" },
       { icon: "user",             label: "Profile",     href: "profile.html" },
     ],
     student: [
       { icon: "layout-dashboard", label: "Dashboard",   href: "dashboard.html" },
+      { icon: "search",           label: "Browse Courses", href: "browse.html" },
       { icon: "smile",            label: "Face Enroll", href: "enroll.html" },
+      { icon: "bell",             label: "Notifications", href: "../shared/notifications.html" },
       { icon: "user",             label: "Profile",     href: "profile.html" },
     ],
     admin: [
       { icon: "layout-dashboard", label: "Dashboard",   href: "dashboard.html" },
+      { icon: "inbox",            label: "Requests",    href: "requests.html" },
       { icon: "users",            label: "Users",       href: "users.html" },
       { icon: "book-open",        label: "Courses",     href: "courses.html" },
       { icon: "calendar",         label: "Attendance",  href: "attendance_log.html" },
+      { icon: "bell",             label: "Notifications", href: "../shared/notifications.html" },
     ],
   };
 

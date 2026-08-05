@@ -30,7 +30,7 @@
       <div class="table-wrapper">
         <table>
           <thead>
-            <tr><th>#</th><th>Course Name</th><th>Teacher</th><th>Enrolled</th><th>Actions</th></tr>
+            <tr><th>#</th><th>Course Name</th><th>Section</th><th>Teacher</th><th>Enrolled</th><th>Actions</th></tr>
           </thead>
           <tbody id="coursesTable">
             <tr><td colspan="5" class="text-muted" style="text-align:center;padding:2rem">Loading…</td></tr>
@@ -52,6 +52,10 @@
       <div class="form-group">
         <label class="form-label">Course Name</label>
         <input id="cName" type="text" class="form-control" placeholder="Database Systems" required/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Section (Optional)</label>
+        <input id="cSection" type="text" class="form-control" placeholder="A" />
       </div>
       <div class="form-group">
         <label class="form-label">Assign Teacher</label>
@@ -81,8 +85,12 @@
     <form id="editCourseForm">
       <input type="hidden" id="editCourseId"/>
       <div class="form-group">
-        <label class="form-label">Course Name</label>
-        <input id="eCName" type="text" class="form-control" required/>
+        <label>Course Name</label>
+        <input type="text" id="eCName" class="form-control" placeholder="e.g. Intro to ML" required/>
+      </div>
+      <div class="form-group">
+        <label>Section (Optional)</label>
+        <input type="text" id="eCSection" class="form-control" placeholder="e.g. A" />
       </div>
       <div class="form-group">
         <label class="form-label">Assign Teacher</label>
@@ -152,6 +160,7 @@
       <tr>
         <td>${i + 1}</td>
         <td>${c.name}</td>
+        <td>${c.section || 'N/A'}</td>
         <td>${c.teacher}</td>
         <td><span class="badge badge-info">${c.enrolled} students</span></td>
         <td style="white-space:nowrap">
@@ -180,6 +189,7 @@
     if (!c) return;
     document.getElementById("editCourseId").value = c.id;
     document.getElementById("eCName").value = c.name;
+    document.getElementById("eCSection").value = c.section || "";
     populateTeacherSelect("eCTeacher", c.teacher_id);
     // Get enrolled student IDs from mock
     const mockCourses = JSON.parse(localStorage.getItem("ax_mock_courses") || "[]");
@@ -204,6 +214,7 @@
     e.preventDefault();
     const payload = {
       name: document.getElementById("cName").value.trim(),
+      section: document.getElementById("cSection").value.trim() || null,
       teacher_id: parseInt(document.getElementById("cTeacher").value) || null,
       student_ids: getCheckedStudentIds("cStudentList"),
     };
@@ -222,6 +233,7 @@
     const id = parseInt(document.getElementById("editCourseId").value);
     const payload = {
       name: document.getElementById("eCName").value.trim(),
+      section: document.getElementById("eCSection").value.trim() || null,
       teacher_id: parseInt(document.getElementById("eCTeacher").value) || null,
       student_ids: getCheckedStudentIds("eCStudentList"),
     };

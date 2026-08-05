@@ -3,7 +3,7 @@ from datetime import date
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from __init__ import db
-from models import User, Course, Attendance, course_students
+from models import User, Course, Attendance, course_students, CourseRequest
 
 teacher_bp = Blueprint("teacher", __name__)
 
@@ -75,10 +75,67 @@ def get_courses():
         total_classes = (db.session.query(db.func.count(db.distinct(Attendance.date)))
                          .filter(Attendance.course_id == c.id).scalar()) or 0
         courses.append({
-            "id": c.id, "name": c.name,
+            "id": c.id, "name": c.name, "section": c.section,
             "enrolled": enrolled, "total_classes": total_classes,
         })
     return jsonify(courses), 200
+
+# ── Course Requests ──────────────────────────────────────────────────────────
+
+@teacher_bp.get("/courses/available")
+@jwt_required()
+def get_available_courses():
+    identity = get_jwt_identity()
+    teacher = _get_teacher(identity)
+    if not teacher:
+        return jsonify({"error": "Teacher not found"}), 404
+
+    # Available courses are courses that do NOT currently have a teacher
+    # and have not been requested by this teacher yet
+    requested_ids = [r.course_id for r in teacher.course_requests if r.status == "pending"]
+    available = Course.query.filter(Course.teacher_id == None).all()
+    available = [c for c in available if c.id not in requested_ids]
+    
+    result = []
+    for c in available:
+        result.append({
+            "id": c.id,
+            "name": c.name,
+            "section": c.section
+        })
+    return jsonify(result), 200
+
+@teacher_bp.post("/requests")
+@jwt_required()
+def request_course():
+    identity = get_jwt_identity()
+    teacher = _get_teacher(identity)
+    if not teacher:
+        return jsonify({"error": "Teacher not found"}), 404
+        
+    data = request.get_json()
+    course_id = data.get("course_id")
+    if not course_id:
+        return jsonify({"error": "Course ID required"}), 400
+        
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({"error": "Course not found"}), 404
+        
+    # Check if already teaching
+    if course.teacher_id == teacher.id:
+        return jsonify({"error": "Already teaching this course"}), 400
+        
+    # Check if request already pending
+    existing = CourseRequest.query.filter_by(user_id=teacher.id, course_id=course.id, status="pending").first()
+    if existing:
+        return jsonify({"error": "Request already pending"}), 400
+        
+    req = CourseRequest(user_id=teacher.id, course_id=course.id, status="pending")
+    db.session.add(req)
+    db.session.commit()
+    
+    return jsonify({"message": "Course teaching requested successfully"}), 201
 
 
 @teacher_bp.get("/courses/<int:course_id>")

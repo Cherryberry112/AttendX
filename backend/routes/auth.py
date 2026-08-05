@@ -3,7 +3,7 @@ import bcrypt
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from __init__ import db
-from models import User
+from models import User, Notification
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -156,3 +156,27 @@ def test_email():
             "MAIL_SENDER": sender,
         }), 500
 
+# ── Notifications ─────────────────────────────────────────────────────────────
+
+@auth_bp.get("/notifications")
+@jwt_required()
+def get_notifications():
+    identity = get_jwt_identity()
+    notifs = Notification.query.filter_by(user_id=identity["id"]).order_by(Notification.created_at.desc()).all()
+    result = []
+    for n in notifs:
+        result.append({
+            "id": n.id,
+            "message": n.message,
+            "is_read": n.is_read,
+            "created_at": str(n.created_at)
+        })
+    return jsonify(result), 200
+
+@auth_bp.post("/notifications/read_all")
+@jwt_required()
+def read_all_notifications():
+    identity = get_jwt_identity()
+    Notification.query.filter_by(user_id=identity["id"], is_read=False).update({"is_read": True})
+    db.session.commit()
+    return jsonify({"message": "Notifications marked as read"}), 200

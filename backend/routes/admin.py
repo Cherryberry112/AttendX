@@ -2,7 +2,7 @@ import bcrypt
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from __init__ import db
-from models import User, Course, Attendance, course_students
+from models import User, Course, Attendance, course_students, CourseRequest, Notification
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -101,13 +101,86 @@ def list_courses():
         teacher_name = c.teacher.username if c.teacher else "Unassigned"
         enrolled_count = c.students.count()
         result.append({
-            "id": c.id, "name": c.name,
+            "id": c.id, "name": c.name, "section": c.section,
             "teacher": teacher_name,
             "teacher_id": c.teacher_id,
             "enrolled": enrolled_count,
         })
     return jsonify(result), 200
 
+# ── Requests Management ──────────────────────────────────────────────────────
+
+@admin_bp.get("/requests")
+@jwt_required()
+def list_requests():
+    identity = get_jwt_identity()
+    if not _require_admin(identity):
+        return jsonify({"error": "Forbidden"}), 403
+    requests = CourseRequest.query.filter_by(status="pending").all()
+    result = []
+    for r in requests:
+        user = User.query.get(r.user_id)
+        course = Course.query.get(r.course_id)
+        if not user or not course: continue
+        result.append({
+            "id": r.id,
+            "user_id": user.id,
+            "user_name": user.username,
+            "user_role": user.type,
+            "course_id": course.id,
+            "course_name": f"{course.name} ({course.section or 'N/A'})",
+            "status": r.status,
+            "created_at": str(r.created_at)
+        })
+    return jsonify(result), 200
+
+@admin_bp.post("/requests/<int:req_id>/approve")
+@jwt_required()
+def approve_request(req_id):
+    identity = get_jwt_identity()
+    if not _require_admin(identity):
+        return jsonify({"error": "Forbidden"}), 403
+    req = CourseRequest.query.get(req_id)
+    if not req or req.status != "pending":
+        return jsonify({"error": "Request not found or already processed"}), 404
+    
+    user = User.query.get(req.user_id)
+    course = Course.query.get(req.course_id)
+    
+    if user.type == "student":
+        course.students.append(user)
+        msg = f"Your request to enroll in {course.name} was approved."
+    elif user.type == "teacher":
+        course.teacher_id = user.id
+        msg = f"Your request to teach {course.name} was approved."
+    else:
+        return jsonify({"error": "Invalid user role"}), 400
+        
+    req.status = "approved"
+    notif = Notification(user_id=user.id, message=msg)
+    db.session.add(notif)
+    db.session.commit()
+    return jsonify({"message": "Request approved"}), 200
+
+@admin_bp.post("/requests/<int:req_id>/deny")
+@jwt_required()
+def deny_request(req_id):
+    identity = get_jwt_identity()
+    if not _require_admin(identity):
+        return jsonify({"error": "Forbidden"}), 403
+    req = CourseRequest.query.get(req_id)
+    if not req or req.status != "pending":
+        return jsonify({"error": "Request not found or already processed"}), 404
+        
+    user = User.query.get(req.user_id)
+    course = Course.query.get(req.course_id)
+    
+    req.status = "denied"
+    msg = f"Your request for {course.name} was denied."
+    notif = Notification(user_id=user.id, message=msg)
+    db.session.add(notif)
+    db.session.commit()
+    return jsonify({"message": "Request denied"}), 200
 
 @admin_bp.post("/courses")
 @jwt_required()
@@ -123,7 +196,7 @@ def create_course():
         teacher = User.query.filter_by(id=teacher_id, type="teacher").first()
         if not teacher:
             return jsonify({"error": "Teacher not found"}), 404
-    course = Course(name=data["name"], teacher_id=teacher_id)
+    course = Course(name=data["name"], section=data.get("section"), teacher_id=teacher_id)
     db.session.add(course)
     db.session.flush()
 
@@ -150,6 +223,8 @@ def update_course(course_id):
     data = request.get_json()
     if "name" in data:
         course.name = data["name"]
+    if "section" in data:
+        course.section = data["section"]
     if "teacher_id" in data:
         course.teacher_id = data["teacher_id"]
     if "student_ids" in data:

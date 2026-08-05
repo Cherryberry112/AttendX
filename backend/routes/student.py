@@ -2,7 +2,7 @@ import bcrypt
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from __init__ import db
-from models import User, Course, Attendance
+from models import User, Course, Attendance, CourseRequest
 
 student_bp = Blueprint("student", __name__)
 
@@ -78,9 +78,68 @@ def get_courses():
         result.append({
             "id": course.id,
             "name": course.name,
+            "section": course.section,
             "teacher": teacher_name,
             "total_classes": total_classes,
             "attended": attended,
             "percentage": pct,
         })
     return jsonify(result), 200
+
+@student_bp.get("/courses/available")
+@jwt_required()
+def get_available_courses():
+    identity = get_jwt_identity()
+    student = _get_student(identity)
+    if not student:
+        return jsonify({"error": "Student not found"}), 404
+
+    enrolled_ids = [c.id for c in student.enrolled_courses]
+    # Also exclude courses they already requested
+    requested_ids = [r.course_id for r in student.course_requests if r.status == "pending"]
+    
+    exclude_ids = enrolled_ids + requested_ids
+    available = Course.query.filter(~Course.id.in_(exclude_ids) if exclude_ids else True).all()
+    
+    result = []
+    for c in available:
+        teacher_name = c.teacher.username if c.teacher else "Unassigned"
+        result.append({
+            "id": c.id,
+            "name": c.name,
+            "section": c.section,
+            "teacher": teacher_name
+        })
+    return jsonify(result), 200
+
+@student_bp.post("/requests")
+@jwt_required()
+def request_course():
+    identity = get_jwt_identity()
+    student = _get_student(identity)
+    if not student:
+        return jsonify({"error": "Student not found"}), 404
+        
+    data = request.get_json()
+    course_id = data.get("course_id")
+    if not course_id:
+        return jsonify({"error": "Course ID required"}), 400
+        
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({"error": "Course not found"}), 404
+        
+    # Check if already enrolled
+    if course in student.enrolled_courses:
+        return jsonify({"error": "Already enrolled"}), 400
+        
+    # Check if request already pending
+    existing = CourseRequest.query.filter_by(user_id=student.id, course_id=course.id, status="pending").first()
+    if existing:
+        return jsonify({"error": "Request already pending"}), 400
+        
+    req = CourseRequest(user_id=student.id, course_id=course.id, status="pending")
+    db.session.add(req)
+    db.session.commit()
+    
+    return jsonify({"message": "Course requested successfully"}), 201

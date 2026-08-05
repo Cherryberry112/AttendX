@@ -41,6 +41,7 @@ class Course(db.Model):
 
     id          = db.Column(db.Integer, primary_key=True)
     name        = db.Column(db.Text, nullable=False)
+    section     = db.Column(db.Text, nullable=True)
     teacher_id  = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at  = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
 
@@ -62,6 +63,37 @@ class Attendance(db.Model):
     created_at  = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
 
     __table_args__ = (db.UniqueConstraint("date", "student_id", "course_id"),)
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+
+class CourseRequest(db.Model):
+    __tablename__ = "course_requests"
+    
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    course_id  = db.Column(db.Integer, db.ForeignKey("courses.id", ondelete="CASCADE"), nullable=False)
+    status     = db.Column(db.Text, server_default="pending", nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
+    
+    user       = db.relationship("User", backref="course_requests")
+    course     = db.relationship("Course", backref="course_requests")
+
+    def __init__(self, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+
+
+class Notification(db.Model):
+    __tablename__ = "notifications"
+    
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    message    = db.Column(db.Text, nullable=False)
+    is_read    = db.Column(db.Boolean, server_default=db.text("false"), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
+    
+    user       = db.relationship("User", backref="notifications")
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
