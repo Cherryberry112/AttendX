@@ -1,26 +1,51 @@
-# AttendX AI-Powered Biometric Attendance & Classroom Management System
-## Complete Project Report & Technical Overview
+# AttendX — AI-Powered Smart Attendance System 🚀
 
+![AttendX Cover](https://via.placeholder.com/1200x400/6C63FF/ffffff?text=AttendX+-+AI+Face+Recognition+Attendance)
 
-## 1. Executive Summary
-**AttendX** is a modern, end-to-end web application that revolutionizes educational attendance tracking by replacing manual roll-calls and basic sign-in sheets with **AI-powered facial recognition** and **dynamic session verification**. 
+**AttendX** is a modern, end-to-end web application that revolutionizes educational attendance tracking by replacing manual roll-calls and basic sign-in sheets with **AI-powered facial recognition** and **dynamic session verification**.
 
-Built with a high-performance **Python/Flask** backend, a responsive **Vanilla CSS/JS** frontend, and a cloud-native **Supabase (PostgreSQL)** database, AttendX guarantees secure, tamper proof attendance marking while delivering a sleek, dark-themed user experience for **Students**, **Teachers**, and **Administrators**.
+Built with a high-performance **Python/Flask** backend, a sleek **Vanilla CSS/JS** frontend, and a cloud-native **Supabase (PostgreSQL)** database, AttendX guarantees secure, tamper-proof attendance marking while delivering a beautiful dark-themed user experience for **Students**, **Teachers**, and **Administrators**.
+
+🌐 **Live Frontend (Vercel):** [https://attendx-virid-mu.vercel.app/](https://attendx-virid-mu.vercel.app/)  
+☁️ **Live Backend (Render):** [https://attendx.onrender.com](https://attendx.onrender.com)
 
 ---
 
-## 2. What We Used — Technology Stack
+## ✨ Key Features & User Workflows
+
+### 🎓 For Students
+- **Biometric Identity Enrollment:** Easily capture and register facial vectors securely using any standard laptop or mobile webcam via `face-api.js`.
+- **Course Browsing & Requests:** Browse available courses, request to enroll, and easily cancel pending requests.
+- **Frictionless Attendance Marking:** Mark attendance in seconds by verifying your face against active classroom sessions—preventing buddy punching.
+- **Live Attendance Dashboard:** View real-time attendance percentages, course schedules, and historical records at a glance.
+- **Instant Email Receipts:** Receive beautifully styled confirmation emails upon registration and attendance events.
+
+### 👨‍🏫 For Teachers & Instructors
+- **Course & Classroom Management:** Browse available courses and request to teach them. 
+- **Dynamic Attendance Sessions:** Launch time-bound attendance sessions with live facial recognition directly from the classroom.
+- **Live Roster Monitoring:** Watch in real-time as students check in, view attendance statistics, and identify chronic absences.
+- **Course Dropout:** Safely drop/unenroll from a course if reassigned.
+
+### 🛡️ For Administrators
+- **System-Wide Analytics:** High-level metrics tracking total active users, enrolled courses, and daily attendance volumes.
+- **Course Request Management:** Approve or deny incoming course requests from Students and Teachers directly from the admin dashboard.
+- **Automated Email Notifications:** Instantly receive structured email notifications whenever a user requests a course.
+- **Security & Audit Logs:** Traceable records of all system actions.
+
+---
+
+## 🛠️ Technology Stack
 
 ```mermaid
 graph TD
     subgraph Frontend [Vercel Hosting / Client Browser]
         UI[HTML5 / Vanilla CSS Design System]
-        JS[JavaScript ES6+ & WebRTC Webcam API]
+        JS[JavaScript ES6+ & face-api.js]
     end
 
     subgraph Backend [Render Cloud Web Service]
         API[Python Flask REST API]
-        AI[Face Recognition / OpenCV Biometric Engine]
+        DB_ORM[SQLAlchemy ORM]
         Email[Brevo HTTP Email API]
     end
 
@@ -29,92 +54,106 @@ graph TD
     end
 
     UI --> JS
-    JS -- "HTTPS REST / JSON" --> API
-    API --> AI
-    API -- "SQL / Relational Queries" --> PG
+    JS -- "HTTPS REST / JSON / JWT" --> API
+    API --> DB_ORM
+    DB_ORM -- "SQL / Relational Queries" --> PG
     API -- "HTTPS POST" --> Email
 ```
 
-### **Core Stack Details**
-| Layer | Technology | Key Purpose & Highlights |
+| Layer | Technology | Highlights |
 | :--- | :--- | :--- |
-| **Frontend UI/UX** | **HTML5 & Vanilla CSS** | Custom design system featuring dark mode, glassmorphic cards, smooth micro-animations, and responsive CSS Grid/Flexbox layouts. Zero heavy UI frameworks. |
-| **Client Logic** | **Vanilla JavaScript (ES6+)** | Modular state management, Fetch API client (`utils.js`), real-time camera stream capture (`getUserMedia` WebRTC), and dynamic DOM rendering. |
-| **Backend API** | **Python 3 / Flask** | Lightweight, high-throughput RESTful API handling authentication, role-based authorization, session management, and business logic. |
-| **AI / Biometrics** | **OpenCV & dlib Face Recognition** | Extracts 128-dimensional facial embeddings from webcam captures, performing cosine similarity / Euclidean distance matching to verify student identities. |
-| **Database** | **Supabase (PostgreSQL 15)** | Relational schema storing users, courses, enrollments, facial biometric vectors, attendance sessions, and timestamped attendance logs. |
-| **Email Service** | **Brevo HTTP API** | Automated transactional email service using custom-designed HTML email templates for user onboarding and attendance notifications. |
-| **Cloud Deployment** | **Render & Vercel** | **Vercel** delivers the static frontend globally via edge CDN; **Render** hosts the Python Flask backend containers with automatic CI/CD. |
+| **Frontend UI/UX** | HTML5, Vanilla CSS, Lucide Icons | Custom design system featuring dark mode, glassmorphic cards, smooth micro-animations, and responsive CSS Grid/Flexbox layouts. |
+| **Client Logic** | Vanilla JavaScript (ES6+) | Modular state management, Fetch API client, real-time camera stream capture (`getUserMedia`), and `face-api.js` for facial detection. |
+| **Backend API** | Python 3, Flask, JWT | Lightweight, high-throughput RESTful API handling authentication, role-based authorization, and business logic. |
+| **AI / Biometrics** | OpenCV & face-api.js | Extracts facial embeddings from webcam captures, performing Euclidean distance matching to verify student identities. |
+| **Database** | Supabase (PostgreSQL 15) | Relational schema storing users, courses, enrollments, facial biometric vectors, and timestamped attendance logs. |
+| **Email Service** | Brevo HTTP API | Automated transactional email service using custom-designed HTML email templates for user onboarding, course requests, and attendance notifications. |
+| **Cloud Deployment**| Render & Vercel | **Vercel** delivers the static frontend globally via edge CDN; **Render** hosts the Python Flask backend containers. |
 
 ---
 
-## 3. What Users Are Getting — Value Proposition & Features
+## 📁 Project Folder Structure
 
-### **For Students**
-- **Biometric Identity Enrollment:** Easily capture and register facial vectors securely using any standard laptop or mobile webcam.
-- **Frictionless Attendance Marking:** Mark attendance in seconds by verifying their face against active classroom sessions preventing buddy punching.
-- **Live Attendance Dashboard:** View real-time attendance percentages, course schedules, and historical records at a glance.
-- **Instant Email Receipts:** Receive beautifully styled confirmation emails upon registration and attendance events.
-
-### **For Teachers & Instructors**
-- **Course & Classroom Management:** Create and organize multiple academic courses with custom course codes and descriptions.
-- **Dynamic Attendance Sessions:** Launch time-bound attendance sessions with optional QR codes or direct classroom verification.
-- **Real-Time Roster Monitoring:** Watch live as students check in, view attendance statistics, and identify chronic absences.
-- **Manual Overrides & Export:** Excused absence management and instant **CSV export** of full attendance rosters for academic reporting.
-
-### **For Administrators**
-- **System-Wide Analytics:** High-level metrics tracking total active users, enrolled courses, and daily attendance volumes.
-- **Role & User Management:** Complete oversight over student, teacher, and administrator accounts.
-- **Security & Audit Logs:** Traceable records of all biometric enrollments and system actions.
-
----
-
-## 4. Frontend Pages & Feature Catalog
-
-Here is the complete breakdown of all pages built into the AttendX platform:
-
-| Page Path | Target Role | Key Features & Functional Workflow |
-| :--- | :--- | :--- |
-| `index.html` | **Public** | **Landing Page:** Introduces the platform, highlights AI biometric capabilities, features responsive navigation, and directs users to sign in or create an account. |
-| `pages/login.html` | **All Users** | **Authentication:** Secure email/password login modal with role-aware redirection (Student, Teacher, or Admin dashboard). |
-| `pages/register.html` | **New Users** | **User Onboarding:** Multi-field registration supporting role selection (Student/Teacher) and automated welcome email dispatch via Brevo. |
-| `pages/student/dashboard.html` | **Student** | **Student Hub:** Displays overall attendance percentage, enrolled courses, quick-action navigation, and recent classroom activity logs. |
-| `pages/student/enroll.html` | **Student** | **Biometric Registration & Course Joining:** Interactive camera interface that captures a live photo, generates facial embeddings via the backend, and enrolls the student in new courses. |
-| `pages/student/mark.html` | **Student** | **Live Attendance Verification:** Activates webcam stream, captures student face during an active course session, and validates identity against stored embeddings. |
-| `pages/teacher/dashboard.html` | **Teacher** | **Instructor Hub:** Summary of active courses, total student reach, quick course creation modal, and session status cards. |
-| `pages/teacher/course.html` | **Teacher** | **Course Management & Session Launcher:** Deep-dive course view to launch attendance sessions, display session QR codes, track live student check-ins, and download CSV reports. |
-| `pages/admin/dashboard.html` | **Admin** | **System Management Hub:** Organization-wide statistics, user directory management, and system health oversight. |
-
----
-
-## 5. End-to-End Biometric Verification Workflow
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Student
-    participant UI as Student Browser (mark.html)
-    participant API as Flask Backend (/api/attendance/mark)
-    participant AI as Face Recognition Engine
-    participant DB as Supabase PostgreSQL
-    participant Email as Brevo Email API
-
-    Student->>UI: Opens "Mark Attendance" & starts webcam
-    UI->>UI: Captures live video frame (JPEG base64)
-    UI->>API: POST /api/attendance/mark (image, course_id, session_id)
-    API->>DB: Fetch enrolled student's stored facial embedding
-    DB-->>API: Return stored 128-d vector
-    API->>AI: Compare live image vs. stored vector (cosine similarity)
-    AI-->>API: Match Confirmed (Distance < 0.60)
-    API->>DB: Insert attendance record (status: present, timestamp)
-    API->>Email: Dispatch custom HTML receipt email
-    API-->>UI: Return success confirmation
-    UI->>Student: Display green success checkmark & updated stats
+```text
+attendX/
+├── backend/
+│   ├── app.py                  # Flask Application Entry Point
+│   ├── models.py               # SQLAlchemy Database Models
+│   ├── config.py               # Application Configuration & Env Vars
+│   ├── routes/                 # REST API Blueprints
+│   │   ├── auth.py             # Login, Registration & Auth routes
+│   │   ├── student.py          # Student-specific operations
+│   │   ├── teacher.py          # Teacher-specific operations
+│   │   └── admin.py            # Admin oversight and management
+│   ├── utils/
+│   │   └── notifications.py    # Brevo Email templates & dispatching
+│   ├── requirements.txt        # Python Dependencies
+│   └── seed_courses.py         # DB seeding scripts
+│
+└── frontend/
+    ├── css/
+    │   ├── global.css          # CSS Variables, Animations, Utilities
+    │   └── login.css           # Authentication UI styles
+    ├── js/
+    │   ├── api.js              # Centralized Fetch wrapper & JWT interceptor
+    │   ├── auth.js             # Client-side Auth state management
+    │   └── utils.js            # Toast notifications, sidebars, badges
+    └── pages/
+        ├── admin/              # Admin Dashboards (Requests, Dashboard)
+        ├── student/            # Student Dashboards (Enroll, Mark, Browse)
+        ├── teacher/            # Teacher Dashboards (Course view, Browse)
+        └── shared/             # Shared UI components (Notifications)
 ```
 
 ---
 
-## 6. Project Highlights & Quality Benchmarks
-- **Zero-Dependency Modern CSS:** Highly customized aesthetics featuring smooth gradients (`#6C63FF` primary branding), glassmorphic card overlays, and subtle hover animations without relying on bulky CSS frameworks.
-- **Resilient Cloud Networking:** Uses HTTP-based email APIs (`requests` + Brevo) and CORS-ready Flask configuration to operate seamlessly across cloud restrictions on Render and Vercel.
-- **Security Best Practices:** Password hashing, JWT/token-based session headers, and server-side biometric vector evaluation ensure user privacy and academic integrity.
+## 🚀 Local Development Setup
+
+### 1. Clone the Repository
+```bash
+git clone https://github.com/Cherryberry112/AttendX.git
+cd AttendX
+```
+
+### 2. Backend Setup
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Create a `.env` file in the `backend` directory with the following variables:
+```ini
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.xxxx.supabase.co:5432/postgres
+JWT_SECRET_KEY=your_super_secret_jwt_key
+BREVO_API_KEY=your_brevo_api_key
+MAIL_SENDER=admin@attendx.com
+```
+
+Run the backend server:
+```bash
+flask run --port=5000
+```
+
+### 3. Frontend Setup
+The frontend uses standard HTML/CSS/JS. To serve it locally and avoid CORS/WebRTC issues, you should use a local web server (like Live Server in VS Code, or Python's `http.server`):
+```bash
+cd ../frontend
+python -m http.server 3000
+```
+Open `http://localhost:3000` in your browser.
+
+> **Note:** Make sure to update the `API_BASE_URL` in `frontend/js/api.js` to point to `http://localhost:5000/api` if you are testing the backend locally.
+
+---
+
+## 📧 Automated Email Workflows
+
+AttendX implements a robust email notification system that triggers highly-styled HTML emails for the following events:
+1. **Welcome/Registration:** Sent immediately when a user creates an account.
+2. **Attendance Logged:** Sent to a student when a teacher successfully marks them present using the live face recognition stream.
+3. **Course Requests:** Sent to all Administrators when a student requests to enroll in a course or when a teacher requests to teach one.
+
+---
+*Developed as a modern capstone solution for next-generation classroom management.*
