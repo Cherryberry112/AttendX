@@ -320,9 +320,9 @@ def send_course_request_email(admin_email: str, requester_name: str, requester_r
     <p>Please log in to the AttendX Admin Dashboard to approve or deny this request.</p>
     
     <div style="text-align: center; margin-top: 28px;">
-      <a href="https://attendx.onrender.com/pages/admin/requests.html" 
+      <a href="https://cherryberry112.github.io/AttendX/" 
          style="display: inline-block; background-color: {_BRAND_PURPLE}; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 6px; font-size: 14px;">
-        Review Request
+        Go to Admin Dashboard &rarr;
       </a>
     </div>
     """
