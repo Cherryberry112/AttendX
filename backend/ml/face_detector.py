@@ -1,348 +1,276 @@
 """
 face_detector.py
 ----------------
-Detects faces in an image and returns a 512-dim normalized embedding.
+OpenCV DNN (ResNet-10 SSD) face detection + dlib 128-dim face embeddings.
 
-Strategy (in priority order):
-  1. InsightFace (buffalo_l) — only if ENABLE_INSIGHTFACE=1 env var set AND GPU available
-  2. OpenCV Haar Cascade (lightweight fallback for any environment)
+Pipeline:
+  1. OpenCV DNN — fast, accurate ResNet-10 SSD detector (confidence >= 0.7)
+  2. dlib via face_recognition — 128-dim L2-normalized embeddings
 
-The OpenCV approach produces reproducible 512-dim embeddings that work on
-memory-constrained free-tier servers like Render's 512MB RAM instances.
+Quality gates applied before embedding:
+  - Brightness : mean(gray) >= 40
+  - Blur       : Laplacian variance >= 100
+  - Face size  : bounding box >= 100x100 pixels
 
-Shared functions exported for use by face_matcher.py:
-  - detect_faces()       — single Haar cascade detection (no fallback)
-  - _align_face()        — eye-based rotation alignment
-  - _combine_embeddings()— HOG+LBP 512-dim embedding
+Exported API:
+  detect_faces_dnn(img)        -> list[(x,y,w,h)]   — largest face only
+  extract_embedding(face_crop) -> np.ndarray(128,)   — or None
+  detect_and_embed(img_bytes, require_single_face)   -> np.ndarray(128,) or None
 """
 from __future__ import annotations
 import os
 import cv2
 import numpy as np
+import face_recognition
 from typing import Optional
 
-# ── InsightFace (disabled on free-tier / Render by default) ──────────────────
-# Only enabled if ENABLE_INSIGHTFACE=1 env var is set AND package is installed.
-_app = None
+# ── DNN model paths ───────────────────────────────────────────────────────────
+_MODELS_DIR   = os.path.join(os.path.dirname(__file__), "..", "models")
+_PROTOTXT     = os.path.join(_MODELS_DIR, "deploy.prototxt")
+_CAFFEMODEL   = os.path.join(_MODELS_DIR, "res10_300x300_ssd_iter_140000.caffemodel")
 
-def _insightface_enabled() -> bool:
-    return os.environ.get("ENABLE_INSIGHTFACE", "0") == "1"
+# ── Load DNN net once at module level (singleton) ─────────────────────────────
+_dnn_net: Optional[cv2.dnn.Net] = None
 
-INSIGHTFACE_AVAILABLE: bool = _insightface_enabled()
-
-def _get_insightface_app():
-    """Load InsightFace app lazily. Returns None if not enabled or not installed."""
-    global _app
-    if not _insightface_enabled():
-        return None
-    if _app is None:
+def _get_dnn_net() -> Optional[cv2.dnn.Net]:
+    global _dnn_net
+    if _dnn_net is None:
         try:
-            from insightface.app import FaceAnalysis  # imported here to avoid NameError at module level
-            _app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-            _app.prepare(ctx_id=0, det_size=(640, 640))
+            _dnn_net = cv2.dnn.readNetFromCaffe(_PROTOTXT, _CAFFEMODEL)
+            print("[INFO] OpenCV DNN face detector loaded successfully")
         except Exception as e:
-            print(f"[WARNING] Could not initialize InsightFace: {e}")
-            return None
-    return _app
+            print(f"[ERROR] Failed to load DNN face detector: {e}")
+            _dnn_net = None
+    return _dnn_net
+
+# ── Warmup: force dlib model load at startup so first request doesn't timeout ─
+try:
+    _dummy = np.zeros((150, 150, 3), dtype=np.uint8)
+    face_recognition.face_encodings(_dummy)
+    print("[INFO] dlib face encoding model warmed up")
+except Exception:
+    pass
 
 
-# ── OpenCV face cascade (always available) ────────────────────────────────────
-_face_cascade    = None
-_profile_cascade = None
-_eye_cascade     = None
+# ── DNN Face Detection ────────────────────────────────────────────────────────
 
-def _get_cascades():
-    global _face_cascade, _profile_cascade, _eye_cascade
-    if _face_cascade is None:
-        try:
-            _face_cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-            )
-            _profile_cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + "haarcascade_profileface.xml"
-            )
-            _eye_cascade = cv2.CascadeClassifier(
-                cv2.data.haarcascades + "haarcascade_eye.xml"
-            )
-        except Exception:
-            _face_cascade    = None
-            _profile_cascade = None
-            _eye_cascade     = None
-    return _face_cascade, _profile_cascade, _eye_cascade
-
-
-# ── Shared face detection (M1 — single source of truth) ──────────────────────
-
-def detect_faces(gray_img: np.ndarray) -> list:
+def detect_faces_dnn(img: np.ndarray, conf_threshold: float = 0.7) -> list:
     """
-    Detect faces using frontal + profile Haar cascades.
-    Returns a list with at most ONE bounding box (the largest face found).
-    """
-    face_cascade, profile_cascade, _ = _get_cascades()
-    if face_cascade is None or face_cascade.empty():
-        print("[WARNING] Haar face cascade not available")
-        return []
-
-    enhanced = cv2.equalizeHist(gray_img)
-
-    # 1. Frontal cascade — try a few parameter sets, return on first hit
-    for scale, neighbors, min_sz in [
-        (1.1,  3, (40, 40)),
-        (1.05, 3, (30, 30)),
-        (1.15, 2, (30, 30)),
-    ]:
-        try:
-            faces = face_cascade.detectMultiScale(
-                enhanced,
-                scaleFactor=scale,
-                minNeighbors=neighbors,
-                minSize=min_sz,
-                flags=cv2.CASCADE_SCALE_IMAGE,
-            )
-            if len(faces) > 0:
-                # Return only the LARGEST face to avoid multi-face confusion
-                best = max(faces, key=lambda b: int(b[2]) * int(b[3]))
-                return [tuple(int(v) for v in best)]
-        except Exception as e:
-            print(f"[WARNING] Frontal cascade error: {e}")
-
-    # 2. Profile cascade (handles turned poses)
-    if profile_cascade is not None and not profile_cascade.empty():
-        for img_to_check, is_flipped in [(enhanced, False), (cv2.flip(enhanced, 1), True)]:
-            try:
-                p_faces = profile_cascade.detectMultiScale(
-                    img_to_check,
-                    scaleFactor=1.1,
-                    minNeighbors=2,
-                    minSize=(30, 30),
-                )
-                if len(p_faces) > 0:
-                    w_img = gray_img.shape[1]
-                    best = max(p_faces, key=lambda b: int(b[2]) * int(b[3]))
-                    px, py, pw, ph = [int(v) for v in best]
-                    if is_flipped:
-                        px = w_img - (px + pw)
-                    return [(px, py, pw, ph)]
-            except Exception as e:
-                print(f"[WARNING] Profile cascade error: {e}")
-
-    return []
-
-
-# ── Eye-based face alignment (H2) ────────────────────────────────────────────
-
-def _align_face(gray_crop: np.ndarray) -> np.ndarray:
-    """
-    Detect eyes within a face crop and rotate to level them.
-    If exactly 2 eyes found → rotate so the eyes are horizontal.
-    If 0 or 1 eye found → return the unrotated crop as-is (don't guess).
-    """
-    _, eye_cascade = _get_cascades()
-
-    if eye_cascade is None or eye_cascade.empty():
-        return gray_crop
-
-    eyes = eye_cascade.detectMultiScale(
-        gray_crop,
-        scaleFactor=1.1,
-        minNeighbors=5,
-        minSize=(15, 15),
-    )
-
-    if len(eyes) != 2:
-        # Ambiguous — use unrotated crop
-        return gray_crop
-
-    # Sort eyes left-to-right by x coordinate
-    eyes = sorted(eyes, key=lambda e: e[0])
-    (ex1, ey1, ew1, eh1) = eyes[0]
-    (ex2, ey2, ew2, eh2) = eyes[1]
-
-    # Compute centers of each eye
-    center_left  = (ex1 + ew1 // 2, ey1 + eh1 // 2)
-    center_right = (ex2 + ew2 // 2, ey2 + eh2 // 2)
-
-    # Compute tilt angle
-    dy = center_right[1] - center_left[1]
-    dx = center_right[0] - center_left[0]
-    angle = np.degrees(np.arctan2(dy, dx))
-
-    # Only rotate if tilt is significant but not extreme (likely a bad detection)
-    if abs(angle) < 0.5 or abs(angle) > 30:
-        return gray_crop
-
-    # Rotate around the midpoint of the two eyes
-    h, w = gray_crop.shape[:2]
-    center = (w // 2, h // 2)
-    M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    aligned = cv2.warpAffine(gray_crop, M, (w, h), flags=cv2.INTER_LINEAR,
-                             borderMode=cv2.BORDER_REPLICATE)
-
-    print(f"[INFO] Face aligned: rotated {angle:.1f}° to level eyes")
-    return aligned
-
-
-# ── Feature extraction helpers ────────────────────────────────────────────────
-
-def _hog_like_features(gray_crop: np.ndarray, cells: int = 8) -> np.ndarray:
-    """
-    Simple HOG-like gradient histogram features for a face crop.
-    Returns a (cells*cells*8,) feature vector.
-    """
-    resized = cv2.resize(gray_crop, (cells * 8, cells * 8), interpolation=cv2.INTER_AREA).astype(np.float32)
-    gx = cv2.Sobel(resized, cv2.CV_32F, 1, 0, ksize=3)
-    gy = cv2.Sobel(resized, cv2.CV_32F, 0, 1, ksize=3)
-    mag, angle = cv2.cartToPolar(gx, gy, angleInDegrees=True)
-
-    cell_h = cells
-    cell_w = cells
-    n_bins = 8
-    features = []
-    for row in range(cells):
-        for col in range(cells):
-            y0, y1 = row * cell_h, (row + 1) * cell_h
-            x0, x1 = col * cell_w, (col + 1) * cell_w
-            cell_mag   = mag[y0:y1, x0:x1]
-            cell_angle = angle[y0:y1, x0:x1]
-            hist, _ = np.histogram(cell_angle, bins=n_bins, range=(0, 360), weights=cell_mag)
-            features.append(hist)
-    return np.array(features, dtype=np.float32).flatten()  # 8*8*8 = 512
-
-
-def _lbp_features(gray_crop: np.ndarray, grid: int = 8) -> np.ndarray:
-    """
-    Local Binary Pattern (LBP) features — texture/edge pattern descriptor.
-    Returns a (grid*grid*8,) = 512-dim feature vector.
-    """
-    resized = cv2.resize(gray_crop, (grid * 8, grid * 8), interpolation=cv2.INTER_AREA).astype(np.uint8)
-    lbp = np.zeros_like(resized, dtype=np.uint8)
-
-    # Basic 3×3 LBP
-    for dy, dx in [(-1,-1),(-1,0),(-1,1),(0,1),(1,1),(1,0),(1,-1),(0,-1)]:
-        shifted = np.roll(np.roll(resized, dy, axis=0), dx, axis=1)
-        lbp = (lbp << 1) | (resized >= shifted).astype(np.uint8)
-
-    cell_size = 8
-    features = []
-    for row in range(grid):
-        for col in range(grid):
-            y0 = row * cell_size
-            x0 = col * cell_size
-            cell = lbp[y0:y0+cell_size, x0:x0+cell_size]
-            hist, _ = np.histogram(cell, bins=8, range=(0, 256))
-            features.append(hist)
-    return np.array(features, dtype=np.float32).flatten()  # 8*8*8 = 512
-
-
-def _combine_embeddings(gray_crop: np.ndarray) -> np.ndarray:
-    """
-    Combine HOG + LBP features (512 each) into a single 512-dim embedding
-    by averaging the two normalized vectors.
-    """
-    hog = _hog_like_features(gray_crop)
-    lbp = _lbp_features(gray_crop)
-
-    def _norm(v):
-        n = np.linalg.norm(v)
-        return v / n if n > 1e-7 else v
-
-    combined = (_norm(hog) + _norm(lbp)) / 2.0
-    n = np.linalg.norm(combined)
-    if n < 1e-7:
-        return None
-    return (combined / n).astype(np.float32)
-
-
-# ── Main detection function ───────────────────────────────────────────────────
-
-def detect_and_embed(img_bytes: bytes, require_single_face: bool = False) -> Optional[np.ndarray]:
-    """
-    Given raw JPEG/PNG bytes, detect the largest face and return a 512-dim
-    normalized embedding, or None if no face found / image too dark / quality
-    checks fail.
+    Detect faces using the ResNet-10 SSD DNN model.
 
     Parameters
     ----------
-    img_bytes : raw image bytes (JPEG/PNG)
-    require_single_face : if True, reject frames with 0 or 2+ faces,
-                          enforce minimum face size and blur checks.
-                          Used during enrollment for strict quality control.
+    img            : BGR image (np.ndarray)
+    conf_threshold : minimum detection confidence (default 0.7)
+
+    Returns
+    -------
+    List of (x, y, w, h) tuples for detections above threshold.
+    Returns ONLY the largest face if multiple detected.
+    Returns [] if net not loaded or no face found.
     """
+    net = _get_dnn_net()
+    if net is None:
+        print("[ERROR] DNN net unavailable — cannot detect faces")
+        return []
+
+    h, w = img.shape[:2]
+
+    blob = cv2.dnn.blobFromImage(
+        cv2.resize(img, (300, 300)),
+        scalefactor=1.0,
+        size=(300, 300),
+        mean=(104.0, 177.0, 123.0),
+    )
+    net.setInput(blob)
+    detections = net.forward()  # shape: (1, 1, N, 7)
+
+    boxes = []
+    for i in range(detections.shape[2]):
+        confidence = float(detections[0, 0, i, 2])
+        if confidence < conf_threshold:
+            continue
+        x1 = int(detections[0, 0, i, 3] * w)
+        y1 = int(detections[0, 0, i, 4] * h)
+        x2 = int(detections[0, 0, i, 5] * w)
+        y2 = int(detections[0, 0, i, 6] * h)
+        bw = x2 - x1
+        bh = y2 - y1
+        if bw > 0 and bh > 0:
+            boxes.append((x1, y1, bw, bh, confidence))
+
+    if not boxes:
+        return []
+
+    # Return only the largest face (by area) to avoid multi-face confusion
+    largest = max(boxes, key=lambda b: b[2] * b[3])
+    x, y, bw, bh, conf = largest
+    print(f"[INFO] DNN detected face at ({x},{y}) size {bw}x{bh} conf={conf:.3f}")
+
+    # Clamp to image bounds
+    x  = max(0, x)
+    y  = max(0, y)
+    bw = min(bw, w - x)
+    bh = min(bh, h - y)
+
+    if len(boxes) > 1:
+        print(f"[INFO] {len(boxes)} faces detected — using largest only")
+
+    return [(x, y, bw, bh)]
+
+
+# ── 128-dim dlib Embedding Extraction ────────────────────────────────────────
+
+def extract_embedding(face_crop: np.ndarray) -> Optional[np.ndarray]:
+    """
+    Extract a 128-dim dlib face embedding from a face crop.
+
+    Parameters
+    ----------
+    face_crop : face region as BGR or grayscale np.ndarray
+
+    Returns
+    -------
+    np.ndarray of shape (128,) normalized via L2, or None if extraction fails.
+    """
+    if face_crop is None or face_crop.size == 0:
+        print("[WARNING] extract_embedding: empty crop")
+        return None
+
+    # Convert to RGB — face_recognition expects RGB
+    if len(face_crop.shape) == 2:
+        # Grayscale → RGB
+        rgb = cv2.cvtColor(face_crop, cv2.COLOR_GRAY2RGB)
+    else:
+        # BGR → RGB
+        rgb = cv2.cvtColor(face_crop, cv2.COLOR_BGR2RGB)
+
+    h, w = rgb.shape[:2]
+
+    # face_recognition.face_encodings expects (top, right, bottom, left) in PIL coords
+    known_locations = [(0, w, h, 0)]
+
+    try:
+        encodings = face_recognition.face_encodings(rgb, known_face_locations=known_locations)
+    except Exception as e:
+        print(f"[ERROR] face_recognition.face_encodings failed: {e}")
+        return None
+
+    if not encodings:
+        print("[WARNING] extract_embedding: no encoding returned by dlib")
+        return None
+
+    emb = np.array(encodings[0], dtype=np.float32)
+    norm = np.linalg.norm(emb)
+    if norm < 1e-7:
+        print("[WARNING] extract_embedding: zero-norm embedding")
+        return None
+
+    return emb / norm
+
+
+# ── Quality Gate Helpers ──────────────────────────────────────────────────────
+
+def _check_brightness(gray: np.ndarray) -> Optional[str]:
+    """Returns error reason string if too dark, else None."""
+    brightness = float(np.mean(gray))
+    if brightness < 40:
+        print(f"[WARNING] Frame rejected: too dark (mean={brightness:.1f})")
+        return "Too dark. Find better lighting."
+    return None
+
+def _check_blur(gray: np.ndarray) -> Optional[str]:
+    """Returns error reason string if too blurry, else None."""
+    variance = cv2.Laplacian(gray, cv2.CV_64F).var()
+    if variance < 100:
+        print(f"[WARNING] Frame rejected: too blurry (Laplacian var={variance:.1f})")
+        return "Image is blurry. Hold the phone steady."
+    return None
+
+def _check_face_size(w: int, h: int, min_px: int = 100) -> Optional[str]:
+    """Returns error reason string if face box too small, else None."""
+    if w < min_px or h < min_px:
+        print(f"[WARNING] Face box too small: {w}x{h} (min {min_px}x{min_px})")
+        return f"Face too small ({w}x{h}px). Move closer and fill the oval."
+    return None
+
+
+# ── Main Public Function ──────────────────────────────────────────────────────
+
+def detect_and_embed(
+    img_bytes: bytes,
+    require_single_face: bool = False,
+) -> Optional[np.ndarray]:
+    """
+    Given raw JPEG/PNG bytes, detect the largest face and return a 128-dim
+    L2-normalized dlib embedding, or None on any failure.
+
+    Parameters
+    ----------
+    img_bytes           : raw image bytes (JPEG/PNG)
+    require_single_face : if True, return None if 0 or 2+ faces detected.
+                          Used during enrollment for strict quality control.
+                          NO central crop fallback — this was causing garbage captures.
+
+    Returns
+    -------
+    np.ndarray of shape (128,) or None
+    """
+    # ── Decode image ─────────────────────────────────────────────────────────
     nparr = np.frombuffer(img_bytes, np.uint8)
     img   = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if img is None:
-        print("[ERROR] Could not decode image bytes")
+        print("[ERROR] detect_and_embed: could not decode image bytes")
         return None
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-    # ── Brightness check ──────────────────────────────────────────────────────
-    brightness = float(np.mean(gray))
-    if brightness < 20:
-        print(f"[WARNING] Frame rejected: too dark (mean={brightness:.1f})")
+    # ── Quality: Brightness ───────────────────────────────────────────────────
+    brightness_err = _check_brightness(gray)
+    if brightness_err:
         return None
-    if brightness < 40:
-        # Enhance dark image rather than reject outright
-        gray = cv2.equalizeHist(gray)
-        img  = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
-        print(f"[INFO] Dark frame enhanced (mean={brightness:.1f})")
 
-    # ── 1. InsightFace (only if explicitly enabled) ───────────────────────────
-    if INSIGHTFACE_AVAILABLE:
-        app = _get_insightface_app()
-        if app is not None:
-            try:
-                faces = app.get(img)
-                if faces:
-                    if require_single_face and len(faces) > 1:
-                        print(f"[WARNING] Enrollment rejected: {len(faces)} faces detected (expected exactly 1)")
-                        return None
-                    face = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
-                    emb  = face.embedding.astype(np.float32)
-                    print("[INFO] InsightFace embedding extracted successfully")
-                    return emb / np.linalg.norm(emb)
-            except Exception as e:
-                print(f"[WARNING] InsightFace inference failed: {e}")
+    # ── Quality: Blur (whole frame — early rejection) ─────────────────────────
+    blur_err = _check_blur(gray)
+    if blur_err:
+        return None
 
-    # ── 2. OpenCV face detection + HOG+LBP embedding ─────────────────────────
-    all_faces = detect_faces(gray)
+    # ── DNN Face Detection ────────────────────────────────────────────────────
+    boxes = detect_faces_dnn(img)
 
-    # ── Face box selection ────────────────────────────────────────────────────
-    if len(all_faces) > 0:
-        # Pick the largest detected face
-        face_box = max(all_faces, key=lambda b: int(b[2]) * int(b[3]))
-        x, y, w, h = [int(v) for v in face_box]
-        print(f"[INFO] Haar face detected at ({x},{y}) size {w}x{h}")
-    else:
-        # No face box found — use central 60% crop as fallback
-        # (the frame was already pose-validated by face-api.js on the client)
-        h_img, w_img = gray.shape[:2]
-        x = int(w_img * 0.2)
-        y = int(h_img * 0.10)
-        w = int(w_img * 0.60)
-        h = int(h_img * 0.80)
-        print("[INFO] No Haar face box — using central crop fallback for embedding")
+    # No face detected
+    if not boxes:
+        if require_single_face:
+            print("[WARNING] detect_and_embed: no face detected (require_single_face=True)")
+        else:
+            print("[WARNING] detect_and_embed: no face detected — skipping (no fallback)")
+        return None
 
-    face_crop = gray[
-        max(0, y): min(gray.shape[0], y + h),
-        max(0, x): min(gray.shape[1], x + w),
-    ]
+    # Multiple faces (only if require_single_face)
+    if require_single_face:
+        # detect_faces_dnn already returns only 1 (the largest), but log it
+        print(f"[INFO] detect_and_embed: {len(boxes)} face(s) after DNN — using largest")
+
+    x, y, bw, bh = boxes[0]
+
+    # ── Quality: Face size ────────────────────────────────────────────────────
+    size_err = _check_face_size(bw, bh)
+    if size_err:
+        return None
+
+    # ── Crop face (BGR — extract_embedding handles color conversion) ──────────
+    face_crop = img[max(0, y):min(img.shape[0], y + bh),
+                    max(0, x):min(img.shape[1], x + bw)]
 
     if face_crop.size == 0:
-        print("[ERROR] Face crop is empty — frame rejected")
+        print("[ERROR] detect_and_embed: face crop is empty after DNN detection")
         return None
 
-    # ── Eye-based alignment ───────────────────────────────────────────────────
-    try:
-        face_crop = _align_face(face_crop)
-    except Exception as e:
-        print(f"[WARNING] Eye alignment failed ({e}) — using unaligned crop")
-
-    # ── Embedding extraction ──────────────────────────────────────────────────
-    emb = _combine_embeddings(face_crop)
+    # ── Extract 128-dim dlib embedding ───────────────────────────────────────
+    emb = extract_embedding(face_crop)
     if emb is None:
-        print("[ERROR] Embedding vector is zero")
+        print("[WARNING] detect_and_embed: dlib returned no encoding for crop")
         return None
 
-    print(f"[INFO] HOG+LBP 512-dim embedding extracted (norm={np.linalg.norm(emb):.4f})")
+    print(f"[INFO] dlib 128-dim embedding extracted (norm={np.linalg.norm(emb):.4f})")
     return emb

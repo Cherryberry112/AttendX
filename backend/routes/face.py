@@ -9,75 +9,124 @@ from models import User, Course
 face_bp = Blueprint("face", __name__)
 
 
-# ── Per-frame Validation ───────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Helper: decode base64 frame string -> raw bytes
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _decode_b64_frame(frame_b64: str):
+    """Strip data-URI prefix, fix padding, and base64-decode. Returns bytes or raises."""
+    if "," in frame_b64:
+        frame_b64 = frame_b64.split(",", 1)[1]
+    missing_padding = len(frame_b64) % 4
+    if missing_padding:
+        frame_b64 += "=" * (4 - missing_padding)
+    return base64.b64decode(frame_b64)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-frame Validation — called after client capture before storing locally
+# ─────────────────────────────────────────────────────────────────────────────
 
 @face_bp.post("/validate-frame")
 @jwt_required()
 def validate_frame():
     """
-    Validate a single frame for face enrollment quality.
-    Called by the frontend after each MediaPipe-gated capture so the user gets
-    server-side confirmation before the step is marked done.
-    Body: { "frame": "data:image/jpeg;base64,..." }
-    Returns: { "valid": true } or { "valid": false, "reason": "..." }
+    Validate a single frame for face enrollment quality using the full
+    DNN + dlib pipeline quality gates (brightness, blur, face size, dlib encoding).
+
+    Body:   { "frame": "data:image/jpeg;base64,..." }
+    Returns: { "valid": true }
+          or { "valid": false, "reason": "..." }
     """
     data = request.get_json(silent=True)
     if not data:
-        return jsonify({"valid": False, "reason": "Invalid request"}), 400
+        return jsonify({"valid": False, "reason": "Invalid request body"}), 400
 
     frame_b64 = data.get("frame", "")
     if not frame_b64:
         return jsonify({"valid": False, "reason": "No frame provided"}), 400
 
-    if "," in frame_b64:
-        frame_b64 = frame_b64.split(",", 1)[1]
-
-    missing_padding = len(frame_b64) % 4
-    if missing_padding:
-        frame_b64 += "=" * (4 - missing_padding)
-
     try:
-        img_bytes = base64.b64decode(frame_b64)
+        img_bytes = _decode_b64_frame(frame_b64)
     except Exception:
         return jsonify({"valid": False, "reason": "Invalid image data"}), 400
 
     try:
-        from ml.face_detector import detect_and_embed
-        embedding = detect_and_embed(img_bytes, require_single_face=False)
+        import cv2, numpy as np_
+        from ml.face_detector import detect_faces_dnn, _check_brightness, _check_blur, extract_embedding
 
-        if embedding is not None:
-            return jsonify({"valid": True}), 200
-        else:
+        nparr = np.frombuffer(img_bytes, np_.uint8)
+        img   = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            return jsonify({"valid": False, "reason": "Could not decode image"}), 400
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # ── Brightness ────────────────────────────────────────────────────────
+        brightness_err = _check_brightness(gray)
+        if brightness_err:
+            return jsonify({"valid": False, "reason": brightness_err}), 200
+
+        # ── Blur ──────────────────────────────────────────────────────────────
+        blur_err = _check_blur(gray)
+        if blur_err:
+            return jsonify({"valid": False, "reason": blur_err}), 200
+
+        # ── DNN Face Detection ────────────────────────────────────────────────
+        boxes = detect_faces_dnn(img)
+
+        if not boxes:
             return jsonify({
                 "valid": False,
-                "reason": "No clear face detected. Make sure your face is centered, "
-                          "well-lit, in focus, and you are the only person in frame."
+                "reason": "No face detected. Center your face, ensure good lighting, and fill the guide oval."
             }), 200
+
+        # detect_faces_dnn already returns only the largest face — if multiple
+        # were found before filtering, the user sees only 1 but we can note it.
+        # For enrollment, require exactly 1 clear face in the shot.
+        x, y, bw, bh = boxes[0]
+
+        if bw < 100 or bh < 100:
+            return jsonify({
+                "valid": False,
+                "reason": f"Face too small ({bw}x{bh}px). Move closer and fill the oval."
+            }), 200
+
+        # ── Crop and attempt dlib embedding ──────────────────────────────────
+        face_crop = img[max(0, y):min(img.shape[0], y + bh),
+                        max(0, x):min(img.shape[1], x + bw)]
+
+        emb = extract_embedding(face_crop)
+        if emb is None:
+            return jsonify({
+                "valid": False,
+                "reason": "Face detected but could not extract features. Ensure good lighting and face is unobstructed."
+            }), 200
+
+        print(f"[INFO] validate-frame: OK — face {bw}x{bh}, emb dim={len(emb)}")
+        return jsonify({"valid": True}), 200
+
     except Exception as e:
         print(f"[ERROR] validate-frame exception: {e}")
-        return jsonify({
-            "valid": False,
-            "reason": "Frame verification temporary error. Please hold steady."
-        }), 200
+        return jsonify({"valid": False, "reason": "Server error during validation — please retry."}), 200
 
 
-# ── Enrollment ────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Enrollment — receive 3 pose frames and store 128-dim embeddings
+# ─────────────────────────────────────────────────────────────────────────────
 
 @face_bp.post("/enroll")
 @jwt_required()
 def enroll():
     """
-    Receive 5 Base64-encoded frame captures (one per pose), extract embeddings,
-    and store them individually as a JSON array-of-arrays.
+    Receive exactly 3 server-validated pose frames, extract 128-dim dlib
+    embeddings, and store them as a JSON array-of-arrays in the database.
 
-    Each frame has already been validated client-side (MediaPipe pose gate)
-    and by /validate-frame. This endpoint does a final server-side quality check
-    and stores all embeddings that pass (minimum 3 required).
-
-    Body: { "frames": ["data:image/jpeg;base64,...", ...] }
+    Body:   { "frames": ["data:image/jpeg;base64,...", ...] }  (exactly 3)
+    Returns: { "message": "...", "poses_stored": 3 }
     """
     identity = get_jwt_identity()
-    student = User.query.filter_by(id=identity["id"], type="student").first()
+    student  = User.query.filter_by(id=identity["id"], type="student").first()
     if not student:
         return jsonify({"error": "Student not found"}), 404
 
@@ -86,50 +135,46 @@ def enroll():
         return jsonify({"error": "Request body missing or invalid JSON"}), 400
 
     frames = data.get("frames", [])
-    if len(frames) < 3:
-        return jsonify({"error": "At least 3 frames required for enrollment"}), 400
+    if len(frames) != 3:
+        return jsonify({
+            "error": f"Exactly 3 frames required for enrollment (received {len(frames)})"
+        }), 400
 
     try:
         from ml.face_detector import detect_and_embed
     except ImportError as e:
-        return jsonify({"error": f"ML module not available: {e}"}), 500
+        return jsonify({"error": f"ML module unavailable: {e}"}), 500
 
-    # ── Extract one embedding per pose frame ──────────────────────────────────
-    pose_embeddings = []  # list of lists — one per successfully processed frame
-    failed_steps    = []
+    # ── Extract one 128-dim embedding per pose frame ───────────────────────
+    pose_embeddings = []
 
     for idx, frame_b64 in enumerate(frames):
+        step = idx + 1
         try:
-            if "," in frame_b64:
-                frame_b64 = frame_b64.split(",", 1)[1]
-            missing_padding = len(frame_b64) % 4
-            if missing_padding:
-                frame_b64 += "=" * (4 - missing_padding)
-            img_bytes = base64.b64decode(frame_b64)
-            embedding = detect_and_embed(img_bytes, require_single_face=False)
+            img_bytes = _decode_b64_frame(frame_b64)
+            embedding = detect_and_embed(img_bytes, require_single_face=True)
 
             if embedding is not None:
                 pose_embeddings.append(embedding.tolist())
-                print(f"[INFO] Step {idx+1}: pose embedding extracted (dim={len(embedding)})")
+                print(f"[INFO] Enroll step {step}: 128-dim embedding OK")
             else:
-                failed_steps.append(idx + 1)
-                print(f"[WARNING] Step {idx+1}: no face detected — skipping")
+                # Hard reject — do not skip any pose step
+                print(f"[ERROR] Enroll step {step}: embedding failed")
+                return jsonify({
+                    "error": (
+                        f"Step {step} failed quality check. "
+                        "Ensure good lighting, only your face in frame, and hold steady. "
+                        "Please re-enroll from the beginning."
+                    )
+                }), 422
 
         except Exception as e:
-            failed_steps.append(idx + 1)
-            print(f"[WARNING] Step {idx+1}: processing error — {e}")
+            print(f"[ERROR] Enroll step {step} exception: {e}")
+            return jsonify({
+                "error": f"Step {step} processing error — please re-enroll. ({e})"
+            }), 500
 
-    if len(pose_embeddings) < 3:
-        return jsonify({
-            "error": (
-                f"Only {len(pose_embeddings)}/{len(frames)} frames produced a usable face. "
-                f"Failed steps: {failed_steps}. "
-                "Please retry in a brighter area and keep your face clearly visible."
-            )
-        }), 422
-
-    # ── Store all pose embeddings as JSON array-of-arrays ─────────────────────
-    # Format: [[emb_pose1], [emb_pose2], ...] — each sub-list is a 512-dim float list
+    # ── All 3 embeddings extracted — save to DB ────────────────────────────
     student.face_embedding = json.dumps(pose_embeddings)
     try:
         db.session.commit()
@@ -138,28 +183,28 @@ def enroll():
         print(f"[ERROR] Database commit failed: {e}")
         return jsonify({"error": "Database error — could not save face embedding. Please try again."}), 500
 
-    print(f"[SUCCESS] Saved {len(pose_embeddings)} pose embeddings for "
-          f"{student.username} (id={student.id}). Skipped steps: {failed_steps}.")
+    print(f"[SUCCESS] Enrolled 3 pose embeddings (128-dim dlib) for "
+          f"{student.username} (id={student.id})")
 
     return jsonify({
-        "message": "Face enrolled successfully",
+        "message": "Face enrolled across 3 angles",
         "poses_stored": len(pose_embeddings),
-        "frames_total": len(frames),
-        "skipped_steps": failed_steps,
     }), 200
 
 
-# ── Live Scan ─────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Live Scan — detect + match faces against enrolled course students
+# ─────────────────────────────────────────────────────────────────────────────
 
 @face_bp.post("/scan")
 @jwt_required()
 def scan():
     """
-    Receive a single Base64 frame, detect all faces, match against
-    enrolled students in the given course.
-    Supports both the new multi-pose embedding format (list-of-lists)
-    and the old single-vector format (flat list) for backwards compatibility.
-    Body: { "frame": "data:image/jpeg;base64,...", "course_id": 1 }
+    Receive a single scan frame, detect faces, and match against enrolled
+    students in the given course using Euclidean distance on 128-dim dlib
+    embeddings.
+
+    Body:   { "frame": "data:image/jpeg;base64,...", "course_id": 1 }
     Returns: { "matches": [{ student_id, name, sid, confidence, bbox }] }
     """
     data = request.get_json(silent=True)
@@ -172,11 +217,8 @@ def scan():
     if not frame_b64 or not course_id:
         return jsonify({"error": "frame and course_id required"}), 400
 
-    if "," in frame_b64:
-        frame_b64 = frame_b64.split(",", 1)[1]
-
     try:
-        img_bytes = base64.b64decode(frame_b64)
+        img_bytes = _decode_b64_frame(frame_b64)
     except Exception as e:
         return jsonify({"error": f"Invalid base64 frame: {e}"}), 400
 
@@ -184,30 +226,33 @@ def scan():
     if not course:
         return jsonify({"error": "Course not found"}), 404
 
-    # ── Load enrolled students, supporting both embedding formats ─────────────
+    # ── Load enrolled students with 128-dim embeddings ─────────────────────
     enrolled = []
     for s in course.students:
-        if s.face_embedding:
-            try:
-                raw = json.loads(s.face_embedding)
-                # list-of-lists = new multi-pose format; flat list = old single-vector
-                if raw and isinstance(raw[0], list):
-                    embeddings = [np.array(e, dtype=np.float32) for e in raw]
-                else:
-                    embeddings = [np.array(raw, dtype=np.float32)]
+        if not s.face_embedding:
+            continue
+        try:
+            raw = json.loads(s.face_embedding)
+            # list-of-lists = multi-pose (new 128-dim format)
+            # flat list     = old single embedding (backwards compat)
+            if raw and isinstance(raw[0], list):
+                embeddings = [np.array(e, dtype=np.float32) for e in raw]
+            else:
+                embeddings = [np.array(raw, dtype=np.float32)]
 
-                enrolled.append({
-                    "student_id": s.id,
-                    "sid":        s.student_id,
-                    "name":       s.username,
-                    "embeddings": embeddings,   # list of np.ndarray (1 old or N new)
-                })
-            except Exception:
-                pass
+            enrolled.append({
+                "student_id": s.id,
+                "sid":        s.student_id,
+                "name":       s.username,
+                "embeddings": embeddings,
+            })
+        except Exception:
+            pass
 
+    # ── Run matching ───────────────────────────────────────────────────────
     try:
         from ml.face_matcher import find_match
-        results = find_match(img_bytes, enrolled, threshold=0.45)
+        results = find_match(img_bytes, enrolled, threshold=0.50)
     except ImportError:
         results = []
     except Exception as e:

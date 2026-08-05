@@ -12,10 +12,10 @@ env/
 .env
 *.env
 
-# InsightFace model cache
+# InsightFace model cache (large ONNX files — not needed)
 .insightface/
-models/
 *.onnx
+# Allow backend/models/ (DNN weights committed to git for Render deploy)
 
 # OS
 .DS_Store

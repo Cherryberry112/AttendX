@@ -20,7 +20,7 @@ class User(db.Model):
     phone           = db.Column(db.Text, nullable=True)
     username        = db.Column(db.Text, nullable=False)
     password        = db.Column(db.Text, nullable=False)                   # bcrypt hash
-    face_embedding  = db.Column(db.Text, nullable=True)                    # JSON string of 512-dim vector
+    face_embedding  = db.Column(db.Text, nullable=True)                    # JSON array of 128-dim dlib face embeddings (3 poses)
     guardian_number = db.Column(db.Text, nullable=True)
     created_at      = db.Column(db.DateTime(timezone=True), server_default=db.func.now())
 
