@@ -635,7 +635,6 @@ function renderSidebar(role, activePage) {
       { icon: "users",            label: "Users",       href: "users.html" },
       { icon: "book-open",        label: "Courses",     href: "courses.html" },
       { icon: "calendar",         label: "Attendance",  href: "attendance_log.html" },
-      { icon: "bell",             label: "Notifications", href: "../shared/notifications.html" },
     ],
   };
 
@@ -647,9 +646,19 @@ function renderSidebar(role, activePage) {
     if (isSharedPage && !n.href.includes("../")) {
       finalHref = `../${role}/${n.href}`;
     }
+    
+    let badgeId = "";
+    let dotHtml = "";
+    if (n.label === "Notifications") badgeId = 'id="notifBadge"';
+    if (n.label === "Requests") badgeId = 'id="reqBadge"';
+    if (badgeId) {
+      dotHtml = `<span ${badgeId} style="display:none; width:8px; height:8px; background:var(--danger); border-radius:50%; position:absolute; right:1rem; top:50%; transform:translateY(-50%); box-shadow: 0 0 5px var(--danger);"></span>`;
+    }
+
     return `
-    <a class="nav-link ${n.label === activePage ? "active" : ""}" href="${finalHref}">
+    <a class="nav-link ${n.label === activePage ? "active" : ""}" href="${finalHref}" style="position:relative;">
       <span class="nav-icon"><i data-lucide="${n.icon}"></i></span> ${n.label}
+      ${dotHtml}
     </a>
     `;
   }).join("");
@@ -695,6 +704,28 @@ function renderSidebar(role, activePage) {
   `);
   document.getElementById("sidebar-placeholder")?.remove();
   if (window.lucide) window.lucide.createIcons();
+  
+  updateSidebarBadges(role);
+}
+
+async function updateSidebarBadges(role) {
+  try {
+    if (role === "admin") {
+      const reqs = await api.get("/admin/requests");
+      if (reqs && reqs.length > 0) {
+        const badge = document.getElementById("reqBadge");
+        if (badge) badge.style.display = "block";
+      }
+    } else {
+      const notifs = await api.get("/auth/notifications");
+      if (notifs && notifs.some(n => !n.is_read)) {
+        const badge = document.getElementById("notifBadge");
+        if (badge) badge.style.display = "block";
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch sidebar badges", err);
+  }
 }
 
 function toggleSidebar(open) {

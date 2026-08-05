@@ -8,17 +8,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 async function loadNotifications() {
   const list = document.getElementById("notificationsList");
-  const markBtn = document.getElementById("markReadBtn");
   try {
     const notifs = await api.get("/auth/notifications");
     if (!notifs || notifs.length === 0) {
       list.innerHTML = `<div class="empty-state">No notifications yet.</div>`;
-      markBtn.style.display = "none";
       return;
     }
 
     const hasUnread = notifs.some(n => !n.is_read);
-    markBtn.style.display = hasUnread ? "block" : "none";
 
     list.innerHTML = notifs.map(n => `
       <div class="notification-item ${n.is_read ? '' : 'unread'}">
@@ -33,18 +30,17 @@ async function loadNotifications() {
     `).join("");
 
     if (window.lucide) window.lucide.createIcons();
-  } catch (err) {
-    list.innerHTML = `<div class="empty-state" style="color:#ff4d6d">Failed to load notifications.</div>`;
-    showToast(err.message, "error");
-  }
-}
 
-async function markAllAsRead() {
-  try {
-    await api.post("/auth/notifications/read_all");
-    showToast("Notifications marked as read", "success");
-    await loadNotifications();
+    if (hasUnread) {
+      // Silently mark as read on the server
+      api.post("/auth/notifications/read_all").catch(console.error);
+      
+      // Update sidebar badge immediately if present
+      const badge = document.getElementById("notifBadge");
+      if (badge) badge.style.display = "none";
+    }
   } catch (err) {
+    list.innerHTML = `<div class="empty-state" style="color:var(--danger)">Failed to load notifications.</div>`;
     showToast(err.message, "error");
   }
 }

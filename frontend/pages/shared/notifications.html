@@ -10,7 +10,7 @@
   <style>
     .notification-item {
       padding: 1.5rem;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      border-bottom: 1px solid var(--border-light);
       display: flex;
       align-items: flex-start;
       gap: 1rem;
@@ -18,7 +18,7 @@
       transition: none; /* static look as requested */
     }
     .notification-item.unread {
-      background: rgba(255, 255, 255, 0.03);
+      background: rgba(168, 85, 247, 0.05);
     }
     .notification-item:last-child {
       border-bottom: none;
@@ -33,18 +33,19 @@
     }
     .notif-message {
       font-size: 1rem;
-      color: #fff;
+      color: var(--text-primary);
       margin-bottom: 0.5rem;
       line-height: 1.5;
+      font-weight: 500;
     }
     .notif-time {
       font-size: 0.85rem;
-      color: #aaa;
+      color: var(--text-muted);
     }
     .empty-state {
       padding: 3rem;
       text-align: center;
-      color: #aaa;
+      color: var(--text-muted);
     }
   </style>
 </head>
@@ -58,7 +59,6 @@
         <h1><i data-lucide="bell"></i> Notifications</h1>
         <p>Stay updated on your requests and course changes.</p>
       </div>
-      <button class="btn btn-outline" onclick="markAllAsRead()" id="markReadBtn" style="display:none;">Mark All as Read</button>
     </div>
 
     <div class="card" style="padding: 0;">
