@@ -296,3 +296,41 @@ def _send_attendance_email(username: str, email: str, course_name: str, date_fmt
         header_color=_BRAND_PURPLE
     )
     _send_async(email, f"Attendance Recorded — {course_name}", html)
+
+# ── Course Request Email (Admin) ──────────────────────────────────────────────────
+
+def send_course_request_email(admin_email: str, requester_name: str, requester_role: str, course_name: str, section: str):
+    if not is_valid_email(admin_email):
+        return
+
+    role_label = requester_role.capitalize()
+    section_str = f" (Section {section})" if section else ""
+    course_full = f"{course_name}{section_str}"
+    
+    action_text = "teach" if requester_role.lower() == "teacher" else "enroll in"
+
+    body = f"""
+    <h3 style="margin-top:0; color:#2D3748; font-size:18px;">New Course Request Pending</h3>
+    <p><strong>{requester_name}</strong> (<em>{role_label}</em>) has requested to <strong>{action_text}</strong> the following course:</p>
+    
+    <div style="background:#F7FAFC; border-left:4px solid {_BRAND_PURPLE}; padding:14px 18px; margin: 18px 0; border-radius:4px;">
+      <p style="margin:0; font-size:16px; font-weight:600; color:#1A202C;">{course_full}</p>
+    </div>
+
+    <p>Please log in to the AttendX Admin Dashboard to approve or deny this request.</p>
+    
+    <div style="text-align: center; margin-top: 28px;">
+      <a href="https://attendx.onrender.com/pages/admin/requests.html" 
+         style="display: inline-block; background-color: {_BRAND_PURPLE}; color: #ffffff; text-decoration: none; font-weight: 600; padding: 12px 24px; border-radius: 6px; font-size: 14px;">
+        Review Request
+      </a>
+    </div>
+    """
+    html = _wrap_email(
+        header_title="Action Required",
+        header_subtitle="New Course Request",
+        body_content=body,
+        to_email=admin_email,
+        header_color=_BRAND_PURPLE
+    )
+    _send_async(admin_email, f"AttendX: New Course Request from {requester_name}", html)

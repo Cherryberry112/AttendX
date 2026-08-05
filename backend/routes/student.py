@@ -142,6 +142,18 @@ def request_course():
     db.session.add(req)
     db.session.commit()
     
+    # Send email notification to admin
+    admin = User.query.filter_by(type="admin").first()
+    if admin and admin.email:
+        from utils.notifications import send_course_request_email
+        send_course_request_email(
+            admin_email=admin.email,
+            requester_name=student.username,
+            requester_role="student",
+            course_name=course.name,
+            section=course.section
+        )
+    
     return jsonify({"message": "Course requested successfully"}), 201
 
 
