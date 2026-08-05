@@ -478,7 +478,8 @@ async function runCountdown(video) {
 async function captureAndVerify(video) {
   const detections = await faceapi
     .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
-    .withFaceLandmarks();
+    .withFaceLandmarks()
+    .withFaceDescriptors();
     
   if (!detections || detections.length === 0) {
     showToast("Face lost right before capture. Please try again.", "error");
@@ -491,7 +492,7 @@ async function captureAndVerify(video) {
     return;
   }
 
-  const descriptor = await faceapi.computeFaceDescriptor(video, detections[0].landmarks);
+  const descriptor = detections[0].descriptor;
   captures.push(Array.from(descriptor));
 
   // Accept immediately — all quality gates passed on the client
