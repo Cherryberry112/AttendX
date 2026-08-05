@@ -515,12 +515,12 @@
       
       const faces = detections.map(d => ({
         descriptor: Array.from(d.descriptor),
-        bbox: {
-          x: d.detection.box.x,
-          y: d.detection.box.y,
-          width: d.detection.box.width,
-          height: d.detection.box.height
-        }
+        bbox: [
+          d.detection.box.x,
+          d.detection.box.y,
+          d.detection.box.x + d.detection.box.width,
+          d.detection.box.y + d.detection.box.height
+        ]
       }));
 
       const res = await api.post("/face/scan", { faces, course_id: courseId });
