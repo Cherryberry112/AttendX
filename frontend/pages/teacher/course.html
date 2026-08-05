@@ -255,6 +255,7 @@
   </main>
 </div>
 
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="../../js/utils.js"></script>
 <script>
   if (!Auth.guard("teacher")) throw new Error("Unauthorized");
@@ -504,23 +505,25 @@
 
   async function captureAndScan() {
     const video  = document.getElementById("cameraFeed");
-    const canvas = document.getElementById("cameraCanvas");
     if (!video.videoWidth) return;
 
-    // Capture current frame for API
-    const offscreen = document.createElement("canvas");
-    offscreen.width  = video.videoWidth;
-    offscreen.height = video.videoHeight;
-    const octx = offscreen.getContext("2d");
-    if (facingMode === "user") {
-      octx.save(); octx.scale(-1, 1); octx.drawImage(video, -offscreen.width, 0); octx.restore();
-    } else {
-      octx.drawImage(video, 0, 0);
-    }
-    const frame = offscreen.toDataURL("image/jpeg", 0.85);
-
     try {
-      const res = await api.post("/face/scan", { frame, course_id: courseId });
+      const detections = await faceapi
+        .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
+        .withFaceLandmarks(true)
+        .withFaceDescriptors();
+      
+      const faces = detections.map(d => ({
+        descriptor: Array.from(d.descriptor),
+        bbox: {
+          x: d.detection.box.x,
+          y: d.detection.box.y,
+          width: d.detection.box.width,
+          height: d.detection.box.height
+        }
+      }));
+
+      const res = await api.post("/face/scan", { faces, course_id: courseId });
       scanOverlays = res.matches || [];  // store for continuous render loop
       let matchedNames = [];
 
@@ -707,7 +710,27 @@
     if (tab !== "camera" && scanning) stopCamera();
   }
 
+  const MODEL_URLS = [
+    "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights",
+    "https://justadudewhohacks.github.io/face-api.js/models",
+    "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights"
+  ];
+  async function initModels() {
+    for (const url of MODEL_URLS) {
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri(url);
+        await faceapi.nets.faceLandmark68TinyNet.loadFromUri(url);
+        await faceapi.nets.faceRecognitionNet.loadFromUri(url);
+        console.log("[face-api] Models loaded successfully from:", url);
+        break;
+      } catch (e) {
+        console.warn(`[face-api] Model load failed from ${url}, trying fallback CDN...`, e);
+      }
+    }
+  }
+
   loadCourse();
+  initModels();
 </script>
 
 <script>

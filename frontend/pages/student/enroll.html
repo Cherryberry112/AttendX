@@ -476,19 +476,25 @@ async function runCountdown(video) {
 //   ✓ face-api.js pose validation: yaw/pitch within step bounds
 // No server round-trip needed here — /enroll validates all 3 frames at the end.
 async function captureAndVerify(video) {
-  // Capture unmirrored frame and downscale to 320px width (speeds up dlib 4x)
-  const TARGET_WIDTH = 320;
-  const aspect = video.videoHeight / video.videoWidth;
-  const TARGET_HEIGHT = Math.round(TARGET_WIDTH * aspect);
-  
-  const c = document.createElement("canvas");
-  c.width = TARGET_WIDTH; 
-  c.height = TARGET_HEIGHT;
-  c.getContext("2d").drawImage(video, 0, 0, TARGET_WIDTH, TARGET_HEIGHT);
-  const frame = c.toDataURL("image/jpeg", 0.92);
+  const detections = await faceapi
+    .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
+    .withFaceLandmarks();
+    
+  if (!detections || detections.length === 0) {
+    showToast("Face lost right before capture. Please try again.", "error");
+    captures = []; currentStep = 0; busy = false;
+    updateStepUI(0);
+    setOval("state-no-face");
+    setMsg("❌ Failed — starting over…", "r");
+    await sleep(2000);
+    startLoop();
+    return;
+  }
+
+  const descriptor = await faceapi.computeFaceDescriptor(video, detections[0].landmarks);
+  captures.push(Array.from(descriptor));
 
   // Accept immediately — all quality gates passed on the client
-  captures.push(frame);
   setOval("state-ok");
   setMsg(`✅ Pose ${currentStep+1}/${STEPS.length} captured!`, "g");
   showToast(`Angle ${currentStep+1}/${STEPS.length} done ✓`, "success", 1200);
@@ -530,49 +536,20 @@ async function submitEnrollment() {
   document.getElementById("stepTitle").textContent = "⏳ Processing…";
   
   const stepDescEl = document.getElementById("stepDesc");
-  stepDescEl.textContent = "Saving your face profile... This takes 20-40 seconds on free tier. Please keep this page open.";
+  stepDescEl.textContent = "Saving your face profile...";
   
-  let cancelPolling = false;
-  const cancelBtn = document.createElement("button");
-  cancelBtn.className = "btn-secondary";
-  cancelBtn.style.marginTop = "1rem";
-  cancelBtn.textContent = "Cancel Enrollment";
-  cancelBtn.onclick = () => { cancelPolling = true; };
-  stepDescEl.appendChild(document.createElement("br"));
-  stepDescEl.appendChild(cancelBtn);
-
   setMsg("⏳ Processing on server…", "p");
 
   try {
-    const res = await api.post("/face/enroll", { frames: captures });
-    if (!res.job_id) throw new Error(res.error || "No job_id returned");
-    const jobId = res.job_id;
-
-    let dots = 0;
-    while (!cancelPolling) {
-      await sleep(2000);
-      if (cancelPolling) break;
-
-      const statusRes = await api.get(`/face/enroll-status/${jobId}`);
-      if (statusRes.status === "completed") {
-        if (videoStream) videoStream.getTracks().forEach(t => t.stop());
-        document.getElementById("enrollCameraBox").classList.add("hidden");
-        document.querySelector(".step-instruction").classList.add("hidden");
-        document.getElementById("enrollControls").classList.add("hidden");
-        document.getElementById("successState").classList.remove("hidden");
-        if (window.lucide) lucide.createIcons();
-        return;
-      } else if (statusRes.status === "failed") {
-        throw new Error(statusRes.error || "Async processing failed on server");
-      }
-      
-      dots = (dots + 1) % 4;
-      setMsg("⏳ Processing" + ".".repeat(dots), "p");
-    }
-
-    if (cancelPolling) {
-      showToast("Enrollment cancelled.", "info", 3000);
-    }
+    const res = await api.post("/face/enroll", { embeddings: captures });
+    
+    if (videoStream) videoStream.getTracks().forEach(t => t.stop());
+    document.getElementById("enrollCameraBox").classList.add("hidden");
+    document.querySelector(".step-instruction").classList.add("hidden");
+    document.getElementById("enrollControls").classList.add("hidden");
+    document.getElementById("successState").classList.remove("hidden");
+    if (window.lucide) lucide.createIcons();
+    return;
   } catch (err) {
     showToast("Enrollment failed: " + (err.message || "Unknown error"), "error", 5000);
   }
@@ -581,8 +558,7 @@ async function submitEnrollment() {
   captures = []; currentStep = 0; busy = false;
   updateStepUI(0);
   setOval("state-no-face");
-  setMsg(cancelPolling ? "❌ Cancelled" : "❌ Failed — starting over…", "r");
-  if (cancelBtn.parentNode) cancelBtn.parentNode.removeChild(cancelBtn);
+  setMsg("❌ Failed — starting over…", "r");
   await sleep(2000);
   startLoop();
 }
@@ -622,8 +598,12 @@ async function initModels() {
       await faceapi.nets.tinyFaceDetector.loadFromUri(url);
 
       note.textContent = "Loading landmark model…";
-      bar.style.width  = "75%";
+      bar.style.width  = "60%";
       await faceapi.nets.faceLandmark68TinyNet.loadFromUri(url);
+
+      note.textContent = "Loading face recognition model (~6MB)…";
+      bar.style.width  = "90%";
+      await faceapi.nets.faceRecognitionNet.loadFromUri(url);
 
       bar.style.width  = "100%";
       await sleep(200);
