@@ -467,7 +467,14 @@ async function runCountdown(video) {
   return false;  // countdown completed normally
 }
 
-// ── Capture + server-side validation per frame ───────────────────────────────
+// ── Capture locally — client checks already ensure quality ───────────────────
+// Client-side gates that already ran before this function is called:
+//   ✓ 30-frame hold (~2s of steady pose at 15fps)
+//   ✓ 3-2-1 countdown with pose-break abort on every tick
+//   ✓ Face size guard: faceRatio >= 0.25
+//   ✓ Client blur check: Laplacian variance >= 80
+//   ✓ face-api.js pose validation: yaw/pitch within step bounds
+// No server round-trip needed here — /enroll validates all 3 frames at the end.
 async function captureAndVerify(video) {
   // Capture unmirrored frame (CSS mirror does not affect canvas draw)
   const c = document.createElement("canvas");
@@ -475,58 +482,22 @@ async function captureAndVerify(video) {
   c.getContext("2d").drawImage(video, 0, 0);
   const frame = c.toDataURL("image/jpeg", 0.92);
 
-  // Server-side validation
-  setOval("state-verify");
-  setMsg("🔄 Verifying on server…", "p");
+  // Accept immediately — all quality gates passed on the client
+  captures.push(frame);
+  setOval("state-ok");
+  setMsg(`✅ Pose ${currentStep+1}/${STEPS.length} captured!`, "g");
+  showToast(`Angle ${currentStep+1}/${STEPS.length} done ✓`, "success", 1200);
+  await sleep(900);
 
-  try {
-    const res = await api.post("/face/validate-frame", { frame });
-
-    if (res.valid) {
-      // ── SERVER ACCEPTED ───────────────────────────────────────────────────
-      captures.push(frame);
-      setOval("state-ok");
-      setMsg(`✅ Step ${currentStep+1}/${STEPS.length} verified!`, "g");
-      showToast(`Angle ${currentStep+1}/${STEPS.length} saved ✓`, "success", 1200);
-      await sleep(900);
-
-      currentStep++;
-      if (currentStep < STEPS.length) {
-        updateStepUI(currentStep);
-        setOval("state-no-face");
-        setMsg("🔍 Detecting face…", "");
-        busy = false;
-        startLoop();
-      } else {
-        await submitEnrollment();
-      }
-
-    } else {
-      // ── SERVER REJECTED — show reason, reset hold, retry same step ───────
-      const reason = res.reason || "Face not clear enough — try again";
-      setOval("state-bad");
-      setMsg(`❌ ${reason}`, "r");
-      showToast("Retry: " + reason, "error", 3000);
-      await sleep(2500);
-      holdCount = 0;
-      drawArc(0);
-      setOval("state-no-face");
-      setMsg("🔍 Detecting face…", "");
-      busy = false;
-      startLoop();
-    }
-
-  } catch (err) {
-    // Network error — fail gracefully and retry
-    setOval("state-bad");
-    setMsg("⚠️ Server unreachable — retrying step…", "r");
-    await sleep(2000);
-    holdCount = 0;
-    drawArc(0);
+  currentStep++;
+  if (currentStep < STEPS.length) {
+    updateStepUI(currentStep);
     setOval("state-no-face");
     setMsg("🔍 Detecting face…", "");
     busy = false;
     startLoop();
+  } else {
+    await submitEnrollment();
   }
 }
 
