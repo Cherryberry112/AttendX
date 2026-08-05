@@ -1,32 +1,31 @@
-# AttendX — AI-Powered Smart Attendance System 🚀
+# AttendX — AI-Powered Smart Attendance System 
 
-![AttendX Cover](https://via.placeholder.com/1200x400/6C63FF/ffffff?text=AttendX+-+AI+Face+Recognition+Attendance)
 
 **AttendX** is a modern, end-to-end web application that revolutionizes educational attendance tracking by replacing manual roll-calls and basic sign-in sheets with **AI-powered facial recognition** and **dynamic session verification**.
 
 Built with a high-performance **Python/Flask** backend, a sleek **Vanilla CSS/JS** frontend, and a cloud-native **Supabase (PostgreSQL)** database, AttendX guarantees secure, tamper-proof attendance marking while delivering a beautiful dark-themed user experience for **Students**, **Teachers**, and **Administrators**.
 
-🌐 **Live Frontend (Vercel):** [https://attendx-virid-mu.vercel.app/](https://attendx-virid-mu.vercel.app/)  
-☁️ **Live Backend (Render):** [https://attendx.onrender.com](https://attendx.onrender.com)
+ **Live Frontend (Vercel):** [https://attendx-virid-mu.vercel.app/](https://attendx-virid-mu.vercel.app/)  
+ **Live Backend (Render):** [https://attendx.onrender.com](https://attendx.onrender.com)
 
 ---
 
 ## ✨ Key Features & User Workflows
 
-### 🎓 For Students
+###  For Students
 - **Biometric Identity Enrollment:** Easily capture and register facial vectors securely using any standard laptop or mobile webcam via `face-api.js`.
 - **Course Browsing & Requests:** Browse available courses, request to enroll, and easily cancel pending requests.
 - **Frictionless Attendance Marking:** Mark attendance in seconds by verifying your face against active classroom sessions—preventing buddy punching.
 - **Live Attendance Dashboard:** View real-time attendance percentages, course schedules, and historical records at a glance.
 - **Instant Email Receipts:** Receive beautifully styled confirmation emails upon registration and attendance events.
 
-### 👨‍🏫 For Teachers & Instructors
+###  For Teachers & Instructors
 - **Course & Classroom Management:** Browse available courses and request to teach them. 
 - **Dynamic Attendance Sessions:** Launch time-bound attendance sessions with live facial recognition directly from the classroom.
 - **Live Roster Monitoring:** Watch in real-time as students check in, view attendance statistics, and identify chronic absences.
 - **Course Dropout:** Safely drop/unenroll from a course if reassigned.
 
-### 🛡️ For Administrators
+###  For Administrators
 - **System-Wide Analytics:** High-level metrics tracking total active users, enrolled courses, and daily attendance volumes.
 - **Course Request Management:** Approve or deny incoming course requests from Students and Teachers directly from the admin dashboard.
 - **Automated Email Notifications:** Instantly receive structured email notifications whenever a user requests a course.
@@ -34,7 +33,7 @@ Built with a high-performance **Python/Flask** backend, a sleek **Vanilla CSS/JS
 
 ---
 
-## 🛠️ Technology Stack
+##  Technology Stack
 
 ```mermaid
 graph TD
@@ -107,7 +106,7 @@ attendX/
 
 ---
 
-## 🚀 Local Development Setup
+##  Local Development Setup
 
 ### 1. Clone the Repository
 ```bash
@@ -148,7 +147,7 @@ Open `http://localhost:3000` in your browser.
 
 ---
 
-## 📧 Automated Email Workflows
+##  Automated Email Workflows
 
 AttendX implements a robust email notification system that triggers highly-styled HTML emails for the following events:
 1. **Welcome/Registration:** Sent immediately when a user creates an account.
