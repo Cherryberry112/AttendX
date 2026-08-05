@@ -390,10 +390,10 @@ const handleMockRequest = async (method, path, body) => {
     setMockDb("ax_mock_notifications", notifications);
   }
 
-  if (method === "GET" && path === "/notifications") {
+  if (method === "GET" && path === "/auth/notifications") {
     return notifications.filter(n => n.user_id === currentUser.id).sort((a,b) => b.id - a.id);
   }
-  if (method === "POST" && path === "/notifications/read_all") {
+  if (method === "POST" && path === "/auth/notifications/read_all") {
     notifications.forEach(n => { if (n.user_id === currentUser.id) n.is_read = true; });
     setMockDb("ax_mock_notifications", notifications);
     return { message: "Read" };
@@ -639,12 +639,20 @@ function renderSidebar(role, activePage) {
     ],
   };
 
+  const isSharedPage = window.location.pathname.includes("/shared/");
+  
   const links = navs[role] || [];
-  const navHTML = links.map(n => `
-    <a class="nav-link ${n.label === activePage ? "active" : ""}" href="${n.href}">
+  const navHTML = links.map(n => {
+    let finalHref = n.href;
+    if (isSharedPage && !n.href.includes("../")) {
+      finalHref = `../${role}/${n.href}`;
+    }
+    return `
+    <a class="nav-link ${n.label === activePage ? "active" : ""}" href="${finalHref}">
       <span class="nav-icon"><i data-lucide="${n.icon}"></i></span> ${n.label}
     </a>
-  `).join("");
+    `;
+  }).join("");
 
   const displayName = user.username || user.name || "User";
   const initials = displayName.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();

@@ -10,7 +10,7 @@ async function loadNotifications() {
   const list = document.getElementById("notificationsList");
   const markBtn = document.getElementById("markReadBtn");
   try {
-    const notifs = await api.get("/notifications");
+    const notifs = await api.get("/auth/notifications");
     if (!notifs || notifs.length === 0) {
       list.innerHTML = `<div class="empty-state">No notifications yet.</div>`;
       markBtn.style.display = "none";
@@ -41,7 +41,7 @@ async function loadNotifications() {
 
 async function markAllAsRead() {
   try {
-    await api.post("/notifications/read_all");
+    await api.post("/auth/notifications/read_all");
     showToast("Notifications marked as read", "success");
     await loadNotifications();
   } catch (err) {
