@@ -5,8 +5,10 @@
 
 Built with a high-performance **Python/Flask** backend, a sleek **Vanilla CSS/JS** frontend, and a cloud-native **Supabase (PostgreSQL)** database, AttendX guarantees secure, tamper-proof attendance marking while delivering a beautiful dark-themed user experience for **Students**, **Teachers**, and **Administrators**.
 
- **Live Frontend (Vercel):** [https://attendx-virid-mu.vercel.app/](https://attendx-virid-mu.vercel.app/)  
- **Live Backend (Render):** [https://attendx.onrender.com](https://attendx.onrender.com)
+🌐 **Live Frontend (Vercel):** [https://attendx-virid-mu.vercel.app/](https://attendx-virid-mu.vercel.app/)  
+☁️ **Live Backend (Render):** [https://attendx.onrender.com](https://attendx.onrender.com)  
+📸 **Website Gallery:** [View Screenshots Folder](https://github.com/Cherryberry112/AttendX/tree/main/Gallery)  
+🎥 **Live Demonstration Video:** [Link to be added]
 
 ---
 
