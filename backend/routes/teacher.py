@@ -90,20 +90,39 @@ def get_available_courses():
     if not teacher:
         return jsonify({"error": "Teacher not found"}), 404
 
-    # Available courses are courses that do NOT currently have a teacher
-    # and have not been requested by this teacher yet
+    teaching_ids = [c.id for c in Course.query.filter_by(teacher_id=teacher.id).all()]
     requested_ids = [r.course_id for r in teacher.course_requests if r.status == "pending"]
-    available = Course.query.filter(Course.teacher_id == None).all()
-    available = [c for c in available if c.id not in requested_ids]
+    
+    # Show courses without a teacher, excluding ones we already teach
+    available = Course.query.filter(Course.teacher_id == None, ~Course.id.in_(teaching_ids) if teaching_ids else True).all()
     
     result = []
     for c in available:
+        status = "pending" if c.id in requested_ids else None
         result.append({
             "id": c.id,
             "name": c.name,
-            "section": c.section
+            "section": c.section,
+            "request_status": status
         })
     return jsonify(result), 200
+
+@teacher_bp.delete("/requests/<int:course_id>/cancel")
+@jwt_required()
+def cancel_request(course_id):
+    identity = get_jwt_identity()
+    teacher = _get_teacher(identity)
+    if not teacher:
+        return jsonify({"error": "Teacher not found"}), 404
+        
+    req = CourseRequest.query.filter_by(user_id=teacher.id, course_id=course_id, status="pending").first()
+    if not req:
+        return jsonify({"error": "Pending request not found"}), 404
+        
+    db.session.delete(req)
+    db.session.commit()
+    
+    return jsonify({"message": "Request cancelled successfully"}), 200
 
 @teacher_bp.post("/requests")
 @jwt_required()

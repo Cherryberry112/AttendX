@@ -24,22 +24,40 @@ function renderTable() {
     return;
   }
   
-  tbody.innerHTML = availableCourses.map(c => `
+  tbody.innerHTML = availableCourses.map(c => {
+    let actionBtn = "";
+    if (c.request_status === "pending") {
+      actionBtn = `<button class="btn btn-sm btn-outline" style="color:var(--danger); border-color:var(--danger);" onclick="cancelRequest(${c.id})">Cancel Request</button>`;
+    } else {
+      actionBtn = `<button class="btn btn-sm btn-primary" onclick="requestCourse(${c.id})">Request Enroll</button>`;
+    }
+
+    return `
     <tr>
       <td>${c.name}</td>
       <td>${c.section || 'N/A'}</td>
       <td>${c.teacher}</td>
       <td>
-        <button class="btn btn-sm btn-primary" onclick="requestCourse(${c.id})">Request Enroll</button>
+        ${actionBtn}
       </td>
     </tr>
-  `).join("");
+  `}).join("");
 }
 
 async function requestCourse(id) {
   try {
     await api.post("/student/requests", { course_id: id });
     showToast("Enrollment requested", "success");
+    await loadCourses();
+  } catch (err) {
+    showToast(err.message, "error");
+  }
+}
+
+async function cancelRequest(id) {
+  try {
+    await api.delete(`/student/requests/${id}/cancel`);
+    showToast("Request cancelled", "success");
     await loadCourses();
   } catch (err) {
     showToast(err.message, "error");
