@@ -478,7 +478,7 @@ async function runCountdown(video) {
 async function captureAndVerify(video) {
   const detections = await faceapi
     .detectAllFaces(video, new faceapi.TinyFaceDetectorOptions({ scoreThreshold: 0.5 }))
-    .withFaceLandmarks()
+    .withFaceLandmarks(true)
     .withFaceDescriptors();
     
   if (!detections || detections.length === 0) {
