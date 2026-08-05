@@ -138,6 +138,26 @@ def request_course():
     return jsonify({"message": "Course teaching requested successfully"}), 201
 
 
+@teacher_bp.delete("/courses/<int:course_id>/drop")
+@jwt_required()
+def drop_course(course_id):
+    identity = get_jwt_identity()
+    teacher = _get_teacher(identity)
+    if not teacher:
+        return jsonify({"error": "Teacher not found"}), 404
+        
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({"error": "Course not found"}), 404
+        
+    if course.teacher_id == teacher.id:
+        course.teacher_id = None
+        db.session.commit()
+        return jsonify({"message": "Successfully dropped the course"}), 200
+    
+    return jsonify({"error": "You are not teaching this course"}), 400
+
+
 @teacher_bp.get("/courses/<int:course_id>")
 @jwt_required()
 def get_course_detail(course_id):

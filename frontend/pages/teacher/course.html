@@ -116,10 +116,15 @@
     </div>
 
     <!-- Tabs -->
-    <div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;border-bottom:1px solid var(--border-light);padding-bottom:0.5rem;flex-wrap:wrap;">
-      <button class="btn btn-primary btn-sm"  id="tab-camera"   onclick="switchTab('camera')"><i data-lucide="camera"></i> Live Attendance</button>
-      <button class="btn btn-outline btn-sm"  id="tab-history"  onclick="switchTab('history')"><i data-lucide="calendar"></i> Session History</button>
-      <button class="btn btn-outline btn-sm"  id="tab-students" onclick="switchTab('students')"><i data-lucide="users"></i> Students</button>
+    <div style="display:flex;gap:0.5rem;margin-bottom:1.5rem;border-bottom:1px solid var(--border-light);padding-bottom:0.5rem;flex-wrap:wrap;justify-content:space-between;align-items:center;">
+      <div style="display:flex;gap:0.5rem;">
+        <button class="btn btn-primary btn-sm"  id="tab-camera"   onclick="switchTab('camera')"><i data-lucide="camera"></i> Live Attendance</button>
+        <button class="btn btn-outline btn-sm"  id="tab-history"  onclick="switchTab('history')"><i data-lucide="calendar"></i> Session History</button>
+        <button class="btn btn-outline btn-sm"  id="tab-students" onclick="switchTab('students')"><i data-lucide="users"></i> Students</button>
+      </div>
+      <div>
+        <button class="btn btn-outline btn-sm" style="color:var(--danger); border-color:var(--danger);" onclick="dropCourse()"><i data-lucide="x-circle"></i> Drop Course</button>
+      </div>
     </div>
 
     <!-- ── Camera Tab ───────────────────────────────────────────── -->
@@ -767,6 +772,19 @@
     });
     if (tab === "history") loadMatrix();
     if (tab !== "camera" && scanning) stopCamera();
+  }
+
+  async function dropCourse() {
+    if (!confirm(`Are you sure you want to drop this course? You will be removed as the teacher.`)) return;
+    try {
+      await api.delete(`/teacher/courses/${courseId}/drop`);
+      showToast("Successfully dropped course", "success");
+      setTimeout(() => {
+        window.location.href = "dashboard.html";
+      }, 1000);
+    } catch (err) {
+      showToast(err.message, "error");
+    }
   }
 
   const MODEL_URLS = [

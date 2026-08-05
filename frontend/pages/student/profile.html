@@ -72,7 +72,7 @@
       <div class="table-wrapper">
         <table>
           <thead>
-            <tr><th>Course</th><th>Teacher</th><th>Attended</th><th>Total</th><th>%</th></tr>
+            <tr><th>Course</th><th>Teacher</th><th>Attended</th><th>Total</th><th>%</th><th>Action</th></tr>
           </thead>
           <tbody id="coursesTable">
             <tr><td colspan="5" class="text-muted" style="text-align:center;padding:1.5rem">Loading…</td></tr>
@@ -111,7 +111,7 @@
 
     const tbody = document.getElementById("coursesTable");
     if (!courses.length) {
-      tbody.innerHTML = `<tr><td colspan="5" class="text-muted" style="text-align:center;padding:1.5rem">No courses yet.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="text-muted" style="text-align:center;padding:1.5rem">No courses yet.</td></tr>`;
       return;
     }
     tbody.innerHTML = courses.map(c => {
@@ -123,6 +123,11 @@
         <td>${c.attended}</td>
         <td>${c.total_classes}</td>
         <td><span class="badge ${cls}">${pct}%</span></td>
+        <td>
+          <button class="btn btn-sm btn-outline" style="color:var(--danger); border-color:var(--danger);" onclick="unenrollCourse(${c.id}, '${c.name.replace(/'/g, "\\'")}')">
+            <i data-lucide="x-circle"></i> Unenroll
+          </button>
+        </td>
       </tr>`;
     }).join("");
   }
@@ -134,6 +139,17 @@
     if (isHidden) {
       document.getElementById("currentPassword").value = "";
       document.getElementById("editName").focus();
+    }
+  }
+
+  async function unenrollCourse(id, name) {
+    if (!confirm(`Are you sure you want to unenroll from ${name}?`)) return;
+    try {
+      await api.delete(`/student/courses/${id}/unenroll`);
+      showToast("Successfully unenrolled", "success");
+      loadProfile();
+    } catch (err) {
+      showToast(err.message, "error");
     }
   }
 

@@ -143,3 +143,25 @@ def request_course():
     db.session.commit()
     
     return jsonify({"message": "Course requested successfully"}), 201
+
+
+@student_bp.delete("/courses/<int:course_id>/unenroll")
+@jwt_required()
+def unenroll_course(course_id):
+    identity = get_jwt_identity()
+    student = _get_student(identity)
+    if not student:
+        return jsonify({"error": "Student not found"}), 404
+        
+    course = Course.query.get(course_id)
+    if not course:
+        return jsonify({"error": "Course not found"}), 404
+        
+    if course in student.enrolled_courses:
+        student.enrolled_courses.remove(course)
+        # Also remove attendance records for this student and course
+        Attendance.query.filter_by(student_id=student.id, course_id=course.id).delete()
+        db.session.commit()
+        return jsonify({"message": "Successfully unenrolled from course"}), 200
+    
+    return jsonify({"error": "Not enrolled in this course"}), 400
